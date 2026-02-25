@@ -1,6 +1,7 @@
 import User from '../models/userSchema.js';
 import AdminSettings from '../models/adminSettingsSchema.js';
 import { cloudinary } from '../config/cloudinary.js';
+import Order from '../models/orderSchema.js'
 
 // ==========================================
 // 1. USER MANAGEMENT
@@ -150,5 +151,55 @@ export const updateOrderStatus = async (req, res) => {
     res.status(200).json({ message: "Manifest updated", order: updatedOrder });
   } catch (error) {
     res.status(500).json({ message: "Update failed", error: error.message });
+  }
+};
+
+// GET /api/admin/sales-report
+export const getSalesReport = async (req, res) => {
+  try {
+    const { view = 'day' } = req.query;
+    
+    let format = "%Y-%m-%d";
+    if (view === 'week') format = "Week %V - %Y";
+    if (view === 'month') format = "%B %Y";
+
+    // Define the "Valid Sale" criteria based on your schema
+    const validSaleCriteria = {
+      paymentStatus: "paid",
+      status: { $nin: ["Cancelled", "Cancellation Requested"] } // Excludes both
+    };
+
+    // AGGREGATION 1: Timeline Data
+    const timeline = await Order.aggregate([
+      { $match: validSaleCriteria },
+      {
+        $group: {
+          _id: { $dateToString: { format: format, date: "$createdAt" } },
+          totalRevenue: { $sum: "$totalAmount" },
+          orderCount: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id": 1 } }
+    ]);
+
+    // AGGREGATION 2: Top 10 Products
+    const topProducts = await Order.aggregate([
+      { $match: validSaleCriteria },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.productId",
+          name: { $first: "$items.name" },
+          unitsSold: { $sum: "$items.quantity" },
+          revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } }
+        }
+      },
+      { $sort: { unitsSold: -1 } },
+      { $limit: 10 }
+    ]);
+
+    res.status(200).json({ timeline, topProducts });
+  } catch (error) {
+    res.status(500).json({ message: "Analytics failure", error: error.message });
   }
 };

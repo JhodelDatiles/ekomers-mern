@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, ShoppingCart, Package, Heart, 
   Settings, LogOut, Boxes, Users, ShieldCheck, Globe,
-  User as UserIcon, MapPin, Lock, ChevronDown
+  User as UserIcon, MapPin, Lock, ChevronDown, TrendingUp
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext"; 
@@ -70,6 +70,7 @@ const UnifiedDashboard = () => {
     { name: "Admin Overview", path: "/admin", icon: <LayoutDashboard size={20} /> },
     { name: "Inventory", path: "/admin/products", icon: <Boxes size={20} /> },
     { name: "Global Orders", path: "/admin/orders", icon: <Package size={20} /> },
+    { name: "Sales Report", path: "/admin/sales", icon: <TrendingUp size={20} /> },
     { name: "User Management", path: "/admin/users", icon: <Users size={20} /> },
     { name: "Configuration", path: "/admin/configuration", icon: <Globe size={20}/>},
   ];
