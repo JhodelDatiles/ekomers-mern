@@ -22,7 +22,8 @@ import AdminOrders from "./pages/adminpages/AdminOrders.jsx";
 import AdminUserManagement from "./pages/adminpages/AdminUserManagement.jsx";
 import AdminSettings from "./pages/adminpages/AdminSettings.jsx";
 import AdminConfiguration from "./pages/adminpages/AdminConfiguration.jsx";
-import AdminPrivacySettings from "./pages/adminpages/AdminPrivacySettings.jsx"; // New import
+import AdminPrivacySettings from "./pages/adminpages/AdminPrivacySettings.jsx";
+import SalesReport from "./pages/adminpages/SalesReport.jsx"; // 👈 Add this
 
 // BLOCK 5: USER PAGES
 import UnifiedDashboard from "./pages/UnifiedDashboard.jsx";
@@ -91,6 +92,7 @@ function App() {
                   <Route index element={<AdminDashboardOverview />} />
                   <Route path="products" element={<AdminProducts />} />
                   <Route path="orders" element={<AdminOrders />} />
+                  <Route path="sales" element={<SalesReport />} /> {/* 👈 Add this line */}
                   <Route path="users" element={<AdminUserManagement />} />
                   <Route path="settings" element={<AdminSettings />} />
                   <Route path="settings/privacy" element={<AdminPrivacySettings />} /> {/* SHARED COMPONENT */}
