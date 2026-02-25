@@ -11,7 +11,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import {
-  DollarSign,
+  PhilippinePesoIcon,
   Package,
   TrendingUp,
   Calendar,
@@ -121,7 +121,7 @@ const SalesReport = () => {
         <StatCard
           label="Net Revenue"
           value={`₱${stats.revenue.toLocaleString()}`}
-          icon={<DollarSign />}
+          icon={<PhilippinePesoIcon />}
           color="text-success"
         />
         <StatCard
