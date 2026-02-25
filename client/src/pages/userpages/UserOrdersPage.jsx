@@ -58,7 +58,6 @@ const UserOrdersPage = () => {
         setModalConfig({ ...modalConfig, isOpen: false });
       } else if (mode === "pickup") {
         await orderAPI.confirmOrderDelivery(order._id);
-        // Standardized to 'Delivered' to sync with Admin Panel
         setOrders(prev => prev.map(o => o._id === order._id ? { ...o, status: 'Delivered' } : o));
         toast.success("ORDER MARKED AS DELIVERED", { icon: '📦' });
         setModalConfig({ ...modalConfig, isOpen: false });
@@ -80,7 +79,6 @@ const UserOrdersPage = () => {
     return { color: 'text-base-content/50', icon: <Hash size={16} />, bg: 'bg-base-content/5' };
   };
 
-// 2. Use it in the loading check
   if (isLoading) {
     return (
       <div className="flex flex-col h-[calc(100vh-120px)] max-w-5xl mx-auto px-4 overflow-hidden pt-6">
@@ -88,13 +86,17 @@ const UserOrdersPage = () => {
       </div>
     );
   }
+
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)] max-w-5xl mx-auto px-4 overflow-hidden pt-6">
-      <header className="flex flex-col gap-4 mb-2 shrink-0">
-        <h1 className="text-3xl font-black uppercase italic tracking-tighter">
+    /* FIXED VIEWPORT WRAPPER */
+    <div className="flex flex-col h-[calc(100vh-120px)] max-w-5xl mx-auto px-4 overflow-hidden">
+      
+      {/* FIXED HEADER & TABS */}
+      <header className="pt-6 shrink-0 bg-base-100 z-20">
+        <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-4">
           Orders <span className="text-primary">Manifest</span>
         </h1>
-        <div className="flex border-b border-base-content/10 overflow-x-auto no-scrollbar bg-base-100 sticky top-0 z-10">
+        <div className="flex border-b border-base-content/10 overflow-x-auto custom-scrollbar">
           {categories.map((tab) => (
             <button
               key={tab}
@@ -109,7 +111,8 @@ const UserOrdersPage = () => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pr-2 custom-scrollbar pb-20 pt-4 space-y-4">
+      {/* SCROLLABLE LIST AREA */}
+      <main className="flex-1 overflow-y-auto pr-2 custom-scrollbar pt-4 pb-10 space-y-4 no-scrollbar">
         {filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 opacity-20 grayscale">
             <Package size={48} className="mb-4" />
@@ -195,9 +198,6 @@ const UserOrdersPage = () => {
                             <button onClick={() => navigate('/messages')} className="btn btn-primary rounded-xl font-black uppercase italic text-[10px] h-14">
                               <MessageCircle size={16} className="mr-1" /> Support
                             </button>
-                            {/* <button onClick={() => setModalConfig({ isOpen: true, mode: "delete", order })} className="btn btn-outline border-2 border-error/30 text-error hover:bg-error rounded-xl font-black uppercase italic text-[10px] h-14">
-                              <Trash2 size={16} className="mr-1" /> Clear Log
-                            </button> */}
                           </div>
                         )}
                       </div>

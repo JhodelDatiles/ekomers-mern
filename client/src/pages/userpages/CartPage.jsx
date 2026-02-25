@@ -17,14 +17,8 @@ const CartPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [processingId, setProcessingId] = useState(null);
 
-  /**
-   * 🛠️ FIX 1: Memoize cartItems to stabilize references.
-   */
   const cartItems = useMemo(() => cart?.items || [], [cart?.items]);
 
-  /**
-   * 🛠️ FIX 2: GroupedCart now uses the stable cartItems reference.
-   */
   const groupedCart = useMemo(() => {
     return cartItems.reduce((acc, item) => {
       const dateKey = new Date(item.updatedAt || new Date()).toLocaleDateString('en-US', {
@@ -36,9 +30,6 @@ const CartPage = () => {
     }, {});
   }, [cartItems]);
 
-  /**
-   * 🛠️ FIX 3: selectedTotal now uses the stable cartItems reference.
-   */
   const selectedTotal = useMemo(() => {
     return cartItems
       .filter(item => selectedIds.includes(item._id))
@@ -47,14 +38,11 @@ const CartPage = () => {
 
   const handleQuantityChange = async (item, newQty) => {
     if (newQty < 1) return;
-
     const sizeData = item.productId?.sizes?.find(s => s.size === item.size);
     const stockLimit = sizeData ? sizeData.stock : 999; 
-
     if (newQty > item.quantity && newQty > stockLimit) {
       return toast.error(`MAX STOCK REACHED: ${stockLimit}`, { id: 'stock' });
     }
-
     setProcessingId(item._id);
     try {
       await updateQuantity(item._id, newQty);
@@ -71,23 +59,16 @@ const CartPage = () => {
     }
   };
 
-  /**
-   * 🚀 Added toast.promise for Bulk Delete
-   */
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
     if (!window.confirm("PURGE SELECTED ITEMS?")) return;
-    
     setIsDeleting(true);
-    
     const deletePromise = Promise.all(selectedIds.map(id => removeFromCart(id)));
-
     toast.promise(deletePromise, {
       loading: 'Purging inventory...',
       success: 'Selected items removed.',
       error: 'Failed to purge items.',
     });
-
     try {
       await deletePromise;
       setSelectedIds([]);
@@ -96,18 +77,13 @@ const CartPage = () => {
     }
   };
 
-  /**
-   * 🚀 Added toast.promise for Individual Delete
-   */
   const handleSingleDelete = async (id) => {
     const deletePromise = removeFromCart(id);
-    
     toast.promise(deletePromise, {
       loading: 'Removing item...',
       success: 'Item removed.',
       error: 'Failed to remove item.',
     });
-    
     await deletePromise;
   };
 
@@ -122,11 +98,16 @@ const CartPage = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 pb-40">
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+    /* FIXED VIEWPORT WRAPPER */
+    <div className="h-[calc(100vh-80px)] overflow-y-auto custom-scrollbar relative max-w-7xl mx-auto px-4 md:px-8">
+      
+      {/* STICKY HEADER */}
+      <header className="sticky top-0 z-40 bg-base-100 pb-6 pt-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-black uppercase italic tracking-tighter">Shopping <span className="text-primary">Bag</span></h1>
-          <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest mt-2">Inventory Manifest</p>
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter">
+            Shopping <span className="text-primary">Cart</span>
+          </h1>
+          <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest mt-2">Cart Management</p>
         </div>
         {cartItems.length > 0 && (
           <div className="flex items-center gap-6">
@@ -145,7 +126,8 @@ const CartPage = () => {
         )}
       </header>
 
-      <div className="space-y-12">
+      {/* SCROLLABLE CONTENT AREA */}
+      <div className="space-y-12 pb-48">
         {cartItems.length === 0 ? (
           <div className="text-center py-20 bg-base-200/30 rounded-[40px] border-2 border-dashed border-base-300">
             <ShoppingBag className="mx-auto mb-4 opacity-10" size={48} />
@@ -203,6 +185,7 @@ const CartPage = () => {
         )}
       </div>
 
+      {/* FIXED FOOTER */}
       {cartItems.length > 0 && (
         <div className="fixed bottom-0 left-0 w-full bg-base-100/80 backdrop-blur-2xl border-t border-base-content/5 p-6 z-[100] shadow-2xl">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -211,7 +194,7 @@ const CartPage = () => {
               <span className="text-4xl font-black text-primary italic">₱{selectedTotal?.toLocaleString()}</span>
             </div>
             <button onClick={handleCheckout} disabled={selectedIds.length === 0} className="btn btn-primary h-16 px-12 rounded-2xl font-black italic uppercase text-xl">
-              Initialize Checkout <ArrowRight size={24} className="ml-2" />
+              Checkout <ArrowRight size={24} className="ml-2" />
             </button>
           </div>
         </div>

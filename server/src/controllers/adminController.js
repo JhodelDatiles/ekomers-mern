@@ -1,7 +1,8 @@
 import User from '../models/userSchema.js';
+import Order from '../models/orderSchema.js'
+import Product from '../models/productSchema.js';
 import AdminSettings from '../models/adminSettingsSchema.js';
 import { cloudinary } from '../config/cloudinary.js';
-import Order from '../models/orderSchema.js'
 
 // ==========================================
 // 1. USER MANAGEMENT
@@ -159,47 +160,76 @@ export const getSalesReport = async (req, res) => {
   try {
     const { view = 'day' } = req.query;
     
+    // 1. Setup Date Formatting for Timeline
     let format = "%Y-%m-%d";
     if (view === 'week') format = "Week %V - %Y";
     if (view === 'month') format = "%B %Y";
 
-    // Define the "Valid Sale" criteria based on your schema
     const validSaleCriteria = {
       paymentStatus: "paid",
-      status: { $nin: ["Cancelled", "Cancellation Requested"] } // Excludes both
+      status: { $nin: ["Cancelled", "Cancellation Requested"] }
     };
 
-    // AGGREGATION 1: Timeline Data
-    const timeline = await Order.aggregate([
-      { $match: validSaleCriteria },
-      {
-        $group: {
-          _id: { $dateToString: { format: format, date: "$createdAt" } },
-          totalRevenue: { $sum: "$totalAmount" },
-          orderCount: { $sum: 1 }
-        }
-      },
-      { $sort: { "_id": 1 } }
+    // 2. Run all queries in parallel for maximum speed
+    // We added 'lowStockProducts' as the 4th item in the array
+    const [timeline, topProducts, recentOrders, lowStockProducts] = await Promise.all([
+      // Timeline Aggregation
+      Order.aggregate([
+        { $match: validSaleCriteria },
+        { 
+          $group: { 
+            _id: { $dateToString: { format: format, date: "$createdAt" } }, 
+            totalRevenue: { $sum: "$totalAmount" }, 
+            orderCount: { $sum: 1 } 
+          } 
+        },
+        { $sort: { "_id": 1 } }
+      ]),
+
+      // Top Products Aggregation
+      Order.aggregate([
+        { $match: validSaleCriteria },
+        { $unwind: "$items" },
+        { 
+          $group: { 
+            _id: "$items.productId", 
+            name: { $first: "$items.name" }, 
+            unitsSold: { $sum: "$items.quantity" }, 
+            revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } } 
+          } 
+        },
+        { $sort: { unitsSold: -1 } },
+        { $limit: 10 }
+      ]),
+
+      // Recent Orders (The table data)
+      Order.find()
+        .sort({ createdAt: -1 })
+        .limit(8)
+        .select('orderId totalAmount status items createdAt')
+        .lean(),
+
+      // NEW: Low Stock Products (Items with 5 or less remaining)
+      Product.find({ stock: { $lte: 5 } })
+        .select('name stock price sizes category') // <--- ADDED 'sizes' and 'category' HERE
+        .sort({ stock: 1 }) // Show out of stock (0) first
+        .limit(10)
+        .lean()
     ]);
 
-    // AGGREGATION 2: Top 10 Products
-    const topProducts = await Order.aggregate([
-      { $match: validSaleCriteria },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.productId",
-          name: { $first: "$items.name" },
-          unitsSold: { $sum: "$items.quantity" },
-          revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } }
-        }
-      },
-      { $sort: { unitsSold: -1 } },
-      { $limit: 10 }
-    ]);
+    // 3. Return a clean object with fallbacks
+    res.status(200).json({
+      timeline: timeline || [],
+      topProducts: topProducts || [],
+      recentOrders: recentOrders || [],
+      lowStockProducts: lowStockProducts || [] // Now this is defined!
+    });
 
-    res.status(200).json({ timeline, topProducts });
   } catch (error) {
-    res.status(500).json({ message: "Analytics failure", error: error.message });
+    console.error("ADMIN_REPORT_ERROR:", error); 
+    res.status(500).json({ 
+      message: "Internal Server Error", 
+      error: error.message 
+    });
   }
 };
