@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@plugin "daisyui"{
+  themes: dark --default --prefersdark, light --preferslight, forest, coffee
+}
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+@media print {
+  /* Hide the entire website */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Show only the modal content */
+  .fixed.inset-0, .fixed.inset-0 * {
+    visibility: visible;
+  }
+
+  /* Remove backgrounds, shadows, and extra space */
+  .fixed.inset-0 {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOutRight {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+/* This targets the toast when it is being removed */
+[data-status='leaving'] {
+  animation: slideOutRight 0.3s ease-in forwards !important;
+}
+
+/* Prevents horizontal scrollbar during animation */
+.react-hot-toast-container {
+  overflow-x: hidden !important;
+}
+
+/* Ensure Leaflet tiles stay below your dropdowns but above the map background */
+.leaflet-container {
+    z-index: 1 !important;
+}
+
+/* Force the map to refresh its size when the modal opens */
+.leaflet-pane {
+    z-index: 2 !important;
+}
+
+/* Fix for the attribution text potentially breaking the layout */
+.leaflet-control-attribution {
+    font-size: 8px !important;
+    background: transparent !important;
+    color: rgba(255,255,255,0.2) !important;
+}
+
+/* FOR SKELETON ANIMATION */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-\[shimmer_2s_infinite\] {
+  animation: shimmer 2s infinite;
+}
