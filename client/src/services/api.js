@@ -416,3 +416,12 @@ export const mapAPI = {
 };
 
 export default api;
+
+export const adminSalesAPI = {
+  getSalesReport: async (view = 'day') => {
+    const response = await api.get(`/admin/sales-report`, {
+      params: { view } 
+    });
+    return response.data;
+  },
+};
