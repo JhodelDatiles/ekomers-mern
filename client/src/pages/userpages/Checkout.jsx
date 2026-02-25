@@ -216,9 +216,9 @@ const Checkout = () => {
       {/* RIGHT COLUMN: TOTALS */}
       <div className="lg:col-span-4">
         <div className="sticky top-24 bg-primary text-black rounded-[40px] p-10 shadow-2xl">
-          <h3 className="font-black uppercase italic text-2xl mb-3 border-b-2 border-black/10 pb-4">Manifest</h3>
+          <h3 className="font-black uppercase italic text-2xl mb-3 border-b-2 border-black/10 pb-4">Order Details</h3>
           
-          <div className="space-y-6 mb-10 max-h-[250px] overflow-y-auto pr-2 custom-manifest-scrollbar">
+          <div className="space-y-6 mb-10 max-h-[120px] overflow-y-auto pr-2 custom-manifest-scrollbar">
             {checkoutItems.map((item) => (
               <div key={item._id} className="flex justify-between items-start font-bold uppercase text-[11px]">
                 <div className="flex flex-col w-2/3">
@@ -238,7 +238,7 @@ const Checkout = () => {
 
           <div className="border-t-2 border-black/10 pt-8 mb-8">
             <div className="flex flex-col">
-              <span className="text-[10px] font-black uppercase opacity-40 mb-1">Total Payable</span>
+              <span className="text-[10px] font-black uppercase opacity-40 mb-1">Total Amount</span>
               <span className="text-5xl font-black italic tracking-tighter leading-none">
                 ₱{checkoutTotal.toLocaleString()}
               </span>
@@ -250,7 +250,7 @@ const Checkout = () => {
             disabled={loading || !activeAddress} 
             className="bg-black hover:bg-black/90 text-white w-full h-24 rounded-[28px] font-black uppercase italic text-xl transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-20"
           >
-            {loading ? <Loader2 className="animate-spin" /> : <>Authorize Dispatch <ShieldCheck size={20} /></>}
+            {loading ? <Loader2 className="animate-spin" /> : <>Checkout <ShieldCheck size={20} /></>}
           </button>
         </div>
       </div>

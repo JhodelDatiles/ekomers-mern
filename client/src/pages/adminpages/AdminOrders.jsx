@@ -5,13 +5,14 @@ import {
   Search,
   Calendar,
   Package,
+  RefreshCw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminOrderAPI } from "../../services/api.js";
 import LogisticsWaybillModal from "../../components/modals/LogisticsWaybillModal";
 
 // ============================================================================
-// SKELETON COMPONENT
+// SKELETON COMPONENT (No changes)
 // ============================================================================
 const LogisticsSkeleton = () => (
   <div className="p-6 h-[calc(100vh-100px)] overflow-hidden animate-pulse">
@@ -50,7 +51,7 @@ const LogisticsSkeleton = () => (
 );
 
 // ============================================================================
-// MAIN COMPONENT: AdminOrders (Logistics Focus)
+// MAIN COMPONENT: AdminOrders
 // ============================================================================
 const AdminOrders = () => {
   const [orders, setOrders] = useState([]);
@@ -60,6 +61,7 @@ const AdminOrders = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [expandedUser, setExpandedUser] = useState(null);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null); // ADDED: Loading state per order
 
   const statusOptions = [
     "Pending",
@@ -97,12 +99,16 @@ const AdminOrders = () => {
   useEffect(() => { fetchOrders(); }, []);
 
   const handleUpdateStatus = async (orderId, newStatus) => {
+    setUpdatingOrderId(orderId); // START LOADING
+    const toastId = toast.loading("Updating shipment status...");
     try {
       await adminOrderAPI.updateOrderStatus(orderId, { status: newStatus });
       setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status: newStatus } : o));
-      toast.success(`Updated to ${newStatus}`);
+      toast.success(`Updated to ${newStatus}`, { id: toastId });
     } catch (err) {
-      toast.error("Sync failed");
+      toast.error("Transmission sync failed", { id: toastId });
+    } finally {
+      setUpdatingOrderId(null); // STOP LOADING
     }
   };
 
@@ -150,9 +156,12 @@ const AdminOrders = () => {
           <h1 className="text-4xl font-black italic tracking-tighter uppercase text-white">
             Logistics <span className="text-primary">Archive</span>
           </h1>
-          <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em] mt-1">
-            Fulfillment & Waybill Management
-          </p>
+          <div className="flex items-center gap-3 mt-1">
+             <p className="text-[10px] font-black opacity-30 uppercase tracking-[0.3em]">
+              Fulfillment & Waybill Management
+            </p>
+            {updatingOrderId && <RefreshCw size={12} className="animate-spin text-primary" />}
+          </div>
         </div>
 
         <div className="space-y-3 w-full md:w-80">
@@ -169,7 +178,6 @@ const AdminOrders = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          {/* QUICK FILTERS */}
           <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
             {["All", "Pending", "Delivered", "Cancelled"].map((s) => (
               <button
@@ -238,40 +246,50 @@ const AdminOrders = () => {
                         <div className="px-5 pb-5">
                           <table className="table w-full border-t border-white/5">
                             <tbody>
-                              {group.userOrders.map((order) => (
-                                <tr key={order._id} className="border-white/5 bg-transparent hover:bg-white/5 transition-colors">
-                                  <td className="font-mono text-[10px] text-primary font-black uppercase tracking-tighter opacity-70">
-                                    #{order._id.slice(-8)}
-                                  </td>
-                                  <td className="font-black text-white text-sm">
-                                    ₱{Number(order.totalAmount).toLocaleString()}
-                                  </td>
-                                  <td>
-                                    <select
-                                      className={`select select-bordered select-xs font-black uppercase italic text-[9px] border-white/10 ${getStatusColor(order.status)}`}
-                                      value={order.status}
-                                      onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
-                                    >
-                                      {statusOptions.map((s) => (
-                                        <option key={s} value={s} className="bg-neutral text-white">
-                                          {s}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  <td className="text-right">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedOrder(order);
-                                        setIsModalOpen(true);
-                                      }}
-                                      className="btn btn-primary btn-xs font-black italic uppercase px-4 active:scale-95 transition-transform"
-                                    >
-                                      <Printer size={12} className="mr-1" /> Print
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                              {group.userOrders.map((order) => {
+                                const isRowUpdating = updatingOrderId === order._id;
+                                return (
+                                  <tr key={order._id} className={`border-white/5 bg-transparent hover:bg-white/5 transition-colors ${isRowUpdating ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <td className="font-mono text-[10px] text-primary font-black uppercase tracking-tighter opacity-70">
+                                      #{order._id.slice(-8)}
+                                    </td>
+                                    <td className="font-black text-white text-sm">
+                                      ₱{Number(order.totalAmount).toLocaleString()}
+                                    </td>
+                                    <td>
+                                      <div className="relative inline-flex items-center">
+                                        <select
+                                          className={`select select-bordered select-xs font-black uppercase italic text-[9px] border-white/10 transition-all ${getStatusColor(order.status)}`}
+                                          value={order.status}
+                                          onChange={(e) => handleUpdateStatus(order._id, e.target.value)}
+                                          disabled={isRowUpdating}
+                                        >
+                                          {statusOptions.map((s) => (
+                                            <option key={s} value={s} className="bg-[#121212] text-white font-bold">
+                                              {s}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        {isRowUpdating && (
+                                          <RefreshCw size={10} className="absolute -right-5 animate-spin text-primary" />
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="text-right">
+                                      <button
+                                        onClick={() => {
+                                          setSelectedOrder(order);
+                                          setIsModalOpen(true);
+                                        }}
+                                        disabled={isRowUpdating}
+                                        className="btn btn-primary btn-xs font-black italic uppercase px-4 active:scale-95 transition-transform disabled:bg-white/5 disabled:text-white/20"
+                                      >
+                                        <Printer size={12} className="mr-1" /> Print
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>

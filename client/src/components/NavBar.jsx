@@ -22,7 +22,7 @@ const Navbar = () => {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [storeSettings, setStoreSettings] = useState({ name: "MN+LA", logo: null });
 
-  const themes = ["dark", "light", "forest", "coffee"];
+  const themes = ["dark", "forest", "coffee"];
   const isAdmin = user?.role === 'admin';
   const uniqueCartCount = cart?.items?.length || 0;
 
