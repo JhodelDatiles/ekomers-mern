@@ -11,6 +11,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [showResend, setShowResend] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -29,6 +30,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setShowResend(false); // Reset on new attempt
     try {
       //goes to server check the user credentials 
       const response = await authAPI.login(formData);
@@ -42,8 +44,21 @@ const Login = () => {
     } catch (error) {
       const message = error.response?.data?.message || "Login failed. Please try again.";
       toast.error(message);
+      // Check if the error is specifically about verification
+      if (message.toLowerCase().includes("verify")) {
+        setShowResend(true);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+  const handleResend = async () => {
+    try {
+      await authAPI.resendVerification(formData.email);
+      toast.success("New verification link sent to your Gmail!");
+      setShowResend(false);
+    } catch (error) {
+      toast.error("Failed to resend. Please try again later.");
     }
   };
 
@@ -57,6 +72,18 @@ const Login = () => {
               <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 text-base-content">Welcome Back</p>
             </div>
 
+             {/* ALERT BOX FOR UNVERIFIED USERS */}
+            {showResend && (
+              <div className="bg-error/10 border border-error/20 p-4 rounded-2xl mb-4 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-top-2">
+                <p className="text-[10px] font-black uppercase text-error text-center">Account not verified</p>
+                <button 
+                  onClick={handleResend}
+                  className="text-[9px] font-black uppercase tracking-widest bg-error text-white px-4 py-2 rounded-xl hover:opacity-80 transition-all"
+                >
+                  Resend Verification Link
+                </button>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* EMAIL */}
               <div className="form-control w-full">
@@ -95,6 +122,7 @@ const Login = () => {
                   required
                 />
               </div>
+              <Link to="/forgot-password" className="text-[10px] uppercase font-black opacity-40 hover:opacity-100 transition-all">Forgot Password?</Link>
 
               <button type="submit" className="btn btn-primary w-full mt-4 font-black uppercase italic tracking-widest rounded-2xl shadow-lg shadow-primary/20" disabled={loading}>
                 {loading ? <span className="loading loading-spinner"></span> : <><LogIn className="w-4 h-4" /> Login</>}

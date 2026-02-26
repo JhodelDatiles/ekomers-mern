@@ -8,7 +8,8 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 const Register = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  // const { login } = useAuth();
+  const [isSubmitted, setIsSubmitted] = useState(false); // New State
 
 
   // 1. Form State
@@ -69,18 +70,41 @@ const Register = () => {
 
     try {
       const response = await authAPI.register(formData);
-      if (response.user) {
-        login(response.user);
-      }
-      toast.success("Account created successfully!");
-      navigate("/");
-    } catch (error) {
-      const message = error.response?.data?.message || "Registration failed. Please try again.";
-      toast.error(message);
+      
+      // SUCCESS STATE
+      setIsSubmitted(true); 
+      toast.success("Verification email sent!");
+// Inside your Register handleSubmit catch block
+} catch (error) {
+  if (error.response?.status === 409) {
+    toast.error("Email already exists. Try logging in!");
+  } else {
+    toast.error(error.response?.data?.message || "Registration failed.");
+  }
+
     } finally {
       setLoading(false);
     }
   };
+  // If email is sent, show this UI instead of the form
+  if (isSubmitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-base-200 p-4">
+        <div className="max-w-md w-full bg-base-100 p-8 rounded-[40px] shadow-xl text-center border border-primary/10">
+          <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Mail className="w-10 h-10 text-primary animate-bounce" />
+          </div>
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter">Check Your Inbox</h2>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mt-2 mb-6">
+            We sent a verification link to <span className="text-primary">{formData.email}</span>
+          </p>
+          <button onClick={() => navigate('/login')} className="btn btn-primary w-full rounded-2xl font-black uppercase italic">
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
  <div className="flex flex-col min-h-screen">
