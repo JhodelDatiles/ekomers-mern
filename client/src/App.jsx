@@ -1,3 +1,4 @@
+import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster, ToastBar } from "react-hot-toast";
 
@@ -5,6 +6,7 @@ import { Toaster, ToastBar } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { WishlistProvider } from "./context/WishlistContext.jsx";
 import { CartProvider } from "./context/CartContext.jsx"; 
+import api from './services/api'
 import ProtectedRoutes from "./components/ProtectedRoutes.jsx";
 
 // BLOCK 2: SHARED COMPONENTS
@@ -42,6 +44,31 @@ import Checkout from "./pages/userpages/Checkout.jsx";
 import PaymentSuccess from "./pages/userpages/PaymentSuccess.jsx"; 
 
 function App() {
+  useEffect(() => {
+    const applyGlobalSettings = async () => {
+      try {
+        const { data } = await api.get('/settings');
+        if (data) {
+          // 1. Apply Tab Title
+          document.title = data.storeName || "My Store";
+          
+          // 2. Apply Favicon
+          if (data.logoUrl) {
+            let link = document.querySelector("link[rel~='icon']");
+            if (!link) {
+              link = document.createElement('link');
+              link.rel = 'icon';
+              document.getElementsByTagName('head')[0].appendChild(link);
+            }
+            link.href = data.logoUrl;
+          }
+        }
+      } catch (err) {
+        console.error("Settings load failed", err);
+      }
+    };
+    applyGlobalSettings();
+  }, []);
   return (
     <AuthProvider>
       <CartProvider>
