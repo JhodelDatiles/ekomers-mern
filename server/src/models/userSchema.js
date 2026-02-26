@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt'; // 👈 Make sure to import this
 
 const userSchema = new mongoose.Schema(
   {
@@ -35,10 +36,29 @@ address: [{
   longitude: Number,
   isDefault: { type: Boolean, default: false },
   address: String // The pre-concatenated string for easy display
-}]
+}],
+isVerified: { type: Boolean, default: false }, // ADD THIS
+verificationToken: { type: String }, // Add this for email links
+    verificationCode: { type: String },  // Keep this for 6-digit reset codes
+    codeExpires: { type: Date },
   },
   { timestamps: true }
 );
+
+// 🚀 THE FIX: Remove 'next' and use return/throw for async
+userSchema.pre('save', async function () {
+  // 1. Only hash if the password actually changed
+  if (!this.isModified('password')) return;
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    // 💡 No next() call needed here!
+  } catch (error) {
+    // 2. Simply throw the error; Mongoose will catch it
+    throw error; 
+  }
+});
 
 const User = mongoose.model('User', userSchema);
 export default User;

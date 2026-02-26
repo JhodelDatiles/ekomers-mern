@@ -74,7 +74,6 @@ export const requestSecurityCode = async (req, res) => {
   }
 };
 
-// @desc    Step 2a: Verify OTP and Change Password
 export const verifyPasswordChange = async (req, res) => {
   try {
     const { current, new: newPassword, code } = req.body;
@@ -87,15 +86,19 @@ export const verifyPasswordChange = async (req, res) => {
     const isMatch = await bcrypt.compare(current, user.password);
     if (!isMatch) return res.status(400).json({ message: "Current password incorrect" });
 
-    // Hash new password
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
+    // ❌ REMOVE THESE TWO LINES (The "Double Hash" Bug)
+    // const salt = await bcrypt.genSalt(10);
+    // user.password = await bcrypt.hash(newPassword, salt);
+    
+    // ✅ REPLACE WITH THIS:
+    user.password = newPassword; // Set plain text, let UserSchema handle hashing
     
     // Clear OTP fields
     user.verificationCode = undefined;
     user.codeExpires = undefined;
-    user.tokenVersion += 1; // Force logout other sessions
-    await user.save();
+    user.tokenVersion += 1; 
+
+    await user.save(); // This triggers userSchema.pre('save') which hashes it ONCE.
 
     res.status(200).json({ message: "Password updated successfully" });
   } catch (error) {

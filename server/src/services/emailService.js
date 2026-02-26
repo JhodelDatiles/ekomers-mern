@@ -37,3 +37,29 @@ export const sendSecurityCode = async (user, code, type) => {
     return false;
   }
 };
+
+export const sendVerificationEmail = async (user) => {
+  try {
+    // Use the field we just saved in the controller
+    const token = user.verificationToken; 
+    
+    if (!token) throw new Error("No token found for user");
+
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${token}`;
+    
+    console.log(`🔗 [DEBUG] Sending Link: ${verificationUrl}`);
+
+    const mailOptions = {
+      from: `"EKOMERS" <${process.env.EMAIL_USER}>`,
+      to: user.email,
+      subject: 'Verify Your Email',
+      html: verificationEmailTemplate(user.username, verificationUrl)
+    };
+
+    await transporter.sendMail(mailOptions);
+    return true;
+  } catch (error) {
+    console.error('❌ Email Error:', error.message);
+    return false;
+  }
+};
