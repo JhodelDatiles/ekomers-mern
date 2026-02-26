@@ -15,7 +15,7 @@ import DashboardSkeleton from "../components/skeletons/DashboardSkeleton";
 const UnifiedDashboard = () => {
   const { user, logout } = useAuth();
   const { wishlist } = useWishlist(); 
-  const { cart } = useCart();          
+  const { cart } = useCart();           
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const location = useLocation();
@@ -24,7 +24,6 @@ const UnifiedDashboard = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(location.pathname.includes("settings"));
   const isAdmin = user?.role === 'admin';
 
-  // --- MEMOIZED FETCH TO PREVENT RE-RENDERS ---
   const fetchOrders = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsLoading(true);
@@ -63,7 +62,7 @@ const UnifiedDashboard = () => {
     cart,
     isLoading,
     setOrders,
-    fetchOrders // Allow children to refresh data
+    fetchOrders 
   };
 
   const adminLinks = [
@@ -92,7 +91,12 @@ const UnifiedDashboard = () => {
 
   return (
     <div className="flex flex-col md:flex-row min-h-[calc(100vh-64px)] bg-base-200 font-sans">
-      <aside className={`w-full md:w-72 bg-base-100 shadow-xl z-10 border-r border-base-300 transition-colors duration-300 ${isAdmin ? 'border-primary/20' : ''}`}>
+      
+      {/* SIDEBAR LOGIC:
+          - 'hidden': Hides the sidebar by default (Mobile/360px).
+          - 'md:flex': Shows the sidebar as a flex container on medium screens (768px+) and up.
+      */}
+      <aside className={`hidden md:flex flex-col w-full md:w-72 bg-base-100 shadow-xl z-10 border-r border-base-300 transition-colors duration-300 ${isAdmin ? 'border-primary/20' : ''}`}>
         <div className="p-6 border-b border-base-200">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-[10px] font-black opacity-50 uppercase tracking-tighter">
