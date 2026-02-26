@@ -32,6 +32,17 @@ const AdminConfiguration = () => {
     }
   });
 
+  // Helper to update Favicon globally
+  const updateFavicon = (url) => {
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.getElementsByTagName('head')[0].appendChild(link);
+    }
+    link.href = url;
+  };
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -51,7 +62,11 @@ const AdminConfiguration = () => {
               street: "", barangay: "", city: "", state: "", zipCode: "", country: "Philippines",
             }
           });
-          if (data.storeLogo?.url) setLogoPreview(data.storeLogo.url);
+          if (data.storeLogo?.url) {
+            setLogoPreview(data.storeLogo.url);
+            updateFavicon(data.storeLogo.url);
+            document.title = data.storeName || "Admin Dashboard";
+          }
         }
       } catch (err) {
         console.error("Fetch Settings Error:", err);
@@ -66,7 +81,9 @@ const AdminConfiguration = () => {
     const file = e.target.files[0];
     if (file) {
       setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file));
+      const previewUrl = URL.createObjectURL(file);
+      setLogoPreview(previewUrl);
+      updateFavicon(previewUrl); // Immediate Favicon Preview
     }
   };
 
@@ -95,11 +112,13 @@ const AdminConfiguration = () => {
         formData.append("logo", logoFile);
       }
 
-      await api.put('/settings', formData, {
+      const { data } = await api.put('/settings', formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       
       toast.success("Global Configuration Updated!", { id: tid });
+      document.title = data.storeName; // Sync Title
+      
       setTimeout(() => window.location.reload(), 1500); 
     } catch (err) {
       console.error("Save Error:", err.response?.data || err.message);
@@ -166,13 +185,16 @@ const AdminConfiguration = () => {
                   maxLength={20}
                   icon={Store}
                   value={settings.storeName}
-                  onChange={(e) => setSettings({...settings, storeName: e.target.value})}
+                  onChange={(e) => {
+                    setSettings({...settings, storeName: e.target.value});
+                    document.title = e.target.value || "Store Configuration"; // Real-time title change
+                  }}
                 />
               </div>
             </section>
           </div>
 
-          {/* META DESCRIPTION - ADAPTIVE */}
+          {/* META DESCRIPTION */}
           <section className="card bg-base-200 border border-base-content/5 rounded-[28px]">
             <div className="card-body">
               <div className="flex justify-between items-end mb-2">
@@ -294,6 +316,13 @@ const AdminConfiguration = () => {
                     value={settings.instagram} 
                     onChange={(e) => setSettings({...settings, instagram: e.target.value})} 
                   />
+                  <FormInput 
+                    label="X URL"
+                    icon={Twitter }
+                    placeholder="https://Twitter.com/yourstore" 
+                    value={settings.instagram} 
+                    onChange={(e) => setSettings({...settings, instagram: e.target.value})} 
+                  />
                 </div>
               </div>
             </section>
@@ -304,7 +333,7 @@ const AdminConfiguration = () => {
           </button>
         </form>
 
-        {/* PREVIEW ASIDE - FULLY ADAPTIVE */}
+        {/* PREVIEW ASIDE */}
         <aside className="lg:col-span-1">
           <div className="sticky top-4 space-y-6">
             <h2 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest opacity-40 mb-4 px-2 text-base-content">

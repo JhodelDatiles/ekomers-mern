@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { 
   Search, Store, ShoppingBag, Heart, Palette, Check, 
   LayoutDashboard, Boxes, ShoppingCart, Package, X, ShoppingBasket,
-  Users, TrendingUp, Settings, Globe, ShieldCheck, Home, Layout 
+  Users, TrendingUp, Settings, Globe, ShieldCheck, Home, Layout,
+  User as UserIcon, MapPin, Lock, ChevronDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { authAPI } from '../services/api'; 
@@ -13,6 +14,7 @@ import { useWishlist } from '../context/WishlistContext';
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { user, logout } = useAuth();
   const { removeFromCart, cart } = useCart(); 
@@ -21,12 +23,15 @@ const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [storeSettings, setStoreSettings] = useState({ name: "MN+LA", logo: null });
+  const [isNavSettingsOpen, setIsNavSettingsOpen] = useState(false);
 
   const themes = ["dark", "forest", "coffee"];
   const isAdmin = user?.role === 'admin';
   const uniqueCartCount = cart?.items?.length || 0;
 
+  // Integrated Dashboard Links
   const adminLinks = [
+    { name: "Overview", path: "/admin", icon: <LayoutDashboard size={14} /> },
     { name: "Inventory", path: "/admin/products", icon: <Boxes size={14} /> },
     { name: "Global Orders", path: "/admin/orders", icon: <Package size={14} /> },
     { name: "Users", path: "/admin/users", icon: <Users size={14} /> },
@@ -35,10 +40,16 @@ const Navbar = () => {
   ];
 
   const userLinks = [
-    { name: "Cart", path: "/dashboard/cart", icon: <ShoppingCart size={14} /> },
-    { name: "Orders", path: "/dashboard/orders", icon: <Package size={14} /> },
+    { name: "Overview", path: "/dashboard", icon: <LayoutDashboard size={14} /> },
+    { name: "My Cart", path: "/dashboard/cart", icon: <ShoppingCart size={14} /> },
+    { name: "My Orders", path: "/dashboard/my-orders", icon: <Package size={14} /> },
     { name: "Wishlist", path: "/dashboard/wishlist", icon: <Heart size={14} /> },
-    { name: "Settings", path: "/dashboard/settings", icon: <Settings size={14} /> },
+  ];
+
+  const settingsSubLinks = [
+    { name: "Profile", path: isAdmin ? "/admin/settings" : "/dashboard/settings", icon: <UserIcon size={12} /> },
+    { name: "Addresses", path: "/dashboard/settings/addresses", icon: <MapPin size={12} />, hideForAdmin: true },
+    { name: "Privacy", path: isAdmin ? "/admin/settings/privacy" : "/dashboard/settings/privacy", icon: <Lock size={12} /> },
   ];
 
   useEffect(() => {
@@ -171,7 +182,6 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* UPDATED: Profile Dropdown Wrapper with Key for instant reactivity */}
         <div key={user?._id || 'guest'} className="flex items-center">
           {user ? (
             <div className="dropdown dropdown-hover dropdown-end">
@@ -197,23 +207,51 @@ const Navbar = () => {
                     <p className="text-sm font-black uppercase italic truncate">{user.username}</p>
                   </div>
 
+                  {/* Dashboard / Storefront Links for Mobile */}
                   <li className="md:hidden">
                       <Link to="/" className="font-bold text-[11px] uppercase"><Home size={14}/> Storefront</Link>
                   </li>
-                  <li className="md:hidden border-b border-base-200 pb-1 mb-1">
-                      <Link to={isAdmin ? "/admin" : "/dashboard"} className="font-bold text-[11px] uppercase text-primary">
-                          <LayoutDashboard size={14}/> {isAdmin ? "Admin Panel" : "Dashboard"}
-                      </Link>
-                  </li>
 
+                  {/* Sidebar Features Ported to Navbar Dropdown */}
                   {(isAdmin ? adminLinks : userLinks).map((link) => (
                     <li key={link.path}>
-                      <Link to={link.path} className="py-2 px-3 text-[11px] font-bold uppercase tracking-tight hover:bg-base-200 rounded-lg flex items-center gap-3 group">
+                      <Link to={link.path} className={`py-2 px-3 text-[11px] font-bold uppercase tracking-tight hover:bg-base-200 rounded-lg flex items-center gap-3 group ${location.pathname === link.path ? "text-primary bg-primary/5" : ""}`}>
                         <span className="opacity-50 group-hover:opacity-100 group-hover:text-primary transition-all">{link.icon}</span> 
                         {link.name}
                       </Link>
                     </li>
                   ))}
+
+                  {/* Ported Settings Accordion */}
+                  <li className="mt-1">
+                    <button 
+                      onClick={(e) => { 
+                        e.preventDefault(); 
+                        e.stopPropagation(); 
+                        setIsNavSettingsOpen(!isNavSettingsOpen); 
+                      }}
+                      className={`flex items-center justify-between py-2 px-3 text-[11px] font-bold uppercase tracking-tight rounded-lg hover:bg-base-200 ${location.pathname.includes("settings") ? "bg-base-200" : ""}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Settings size={14} className={isNavSettingsOpen ? "animate-spin-slow text-primary" : "opacity-50"} />
+                        Settings
+                      </div>
+                      <ChevronDown size={12} className={`transition-transform duration-300 ${isNavSettingsOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    <div className={`overflow-hidden transition-all duration-300 ${isNavSettingsOpen ? "max-h-40 opacity-100 mb-2" : "max-h-0 opacity-0"}`}>
+                      {settingsSubLinks
+                        .filter(sub => !(isAdmin && sub.hideForAdmin))
+                        .map((sub) => (
+                        <Link 
+                          key={sub.path} 
+                          to={sub.path} 
+                          className={`flex items-center gap-3 ml-6 py-2.5 text-[10px] font-bold uppercase rounded-lg ${location.pathname === sub.path ? "text-primary bg-primary/5" : "opacity-60 hover:opacity-100"}`}
+                        >
+                          {sub.icon} {sub.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </li>
 
                   <div className="divider my-1 opacity-50"></div>
                   <li>
