@@ -37,41 +37,37 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
 // 2. INITIAL AUTH CHECK (Inside AuthContext.jsx)
+// Inside AuthContext.jsx
 useEffect(() => {
   const checkAuth = async () => {
     const storedUser = localStorage.getItem('user');
-    
-    // Even if no storedUser, we should try to fetch once 
-    // to see if a valid HTTP-only cookie session exists.
+
+    // 🚀 IMPROVEMENT: If no user is in localStorage, don't ping the server.
+    // This prevents the 401 error in the console for guests.
+    if (!storedUser) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await authAPI.getCurrentUser();
       if (response?.user) {
-        setUser(response.user); 
-      } else if (response) {
-        // Fallback if the backend sends the user object directly without the .user wrapper
-        setUser(response);
+        setUser(response.user);
       }
     } catch (err) {
-      console.warn("[Auth] Initial check failed, attempting silent recovery...");
-      
-      // If 401, the interceptor in api.js will already try to refresh.
-      // We just need to ensure we don't wipe the user state prematurely 
-      // unless the refresh actually fails.
+      // If the token is actually invalid/expired, the interceptor will try to refresh.
+      // If that fails, we clear the state.
       if (err.response?.status === 401) {
-         // The interceptor's 'auth-synchronized' event will catch this 
-         // and update the state automatically!
-      } else {
-         // Only clear if it's a non-401 fatal error
-         // setUser(null); 
+        setUser(null);
+        localStorage.removeItem('user');
       }
     } finally {
       setLoading(false);
     }
   };
-  
+
   checkAuth();
 }, []);
-
 
   const login = (userData) => {
     setUser(userData);
@@ -90,13 +86,18 @@ useEffect(() => {
   // We expose setUser so that Profile/Address components can update the global user state
   return (
     <AuthContext.Provider value={{ user, setUser, login, logout, loading }}>
-      {loading ? (
-        <div className="min-h-screen flex items-center justify-center bg-[#1a1c23]">
-          <span className="loading loading-spinner loading-lg text-primary"></span>
-        </div>
-      ) : (
-        children
-      )}
+{loading ? (
+  <div className="min-h-screen flex items-center justify-center bg-base-300">
+    <div className="flex flex-col items-center gap-4">
+      <span className="loading loading-spinner loading-lg text-primary"></span>
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40">
+        Syncing Session
+      </p>
+    </div>
+  </div>
+) : (
+  children
+)}
     </AuthContext.Provider>
   );
 };

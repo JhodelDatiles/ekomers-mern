@@ -1,8 +1,10 @@
 import User from '../models/userSchema.js';
+import { sendVerificationEmail, sendSecurityCode } from '../services/emailService.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
-// Helper to determine cookie security based on environment
 const getCookieOptions = () => {
   const isProduction = process.env.NODE_ENV === 'production';
   
@@ -42,34 +44,140 @@ const setTokenCookies = (res, user) => {
 
 export const register = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    const findEmail = await User.findOne({ email: email.toLowerCase() });
-    if (findEmail) return res.status(409).json({ message: "Email already exists!" });
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    const user = new User({
-      username,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      role: 'user'
+    const { email, password, username } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(409).json({ message: "User already exists" });
+
+    const token = crypto.randomBytes(32).toString('hex');
+
+    const user = await User.create({ 
+      email, 
+      password, 
+      username, 
+      verificationToken: token 
     });
-    await user.save();
-    setTokenCookies(res, user);
-    res.status(201).json({
-      message: "User registered successfully!",
-      user: { id: user._id, username: user.username, email: user.email, role: user.role }
+
+    // 🚀 WRAP EMAIL IN A TRY-CATCH
+    try {
+      await sendVerificationEmail(user);
+    } catch (emailErr) {
+      console.error("❌ Email Service Failed:", emailErr.message);
+      // We don't return 500 here because the user WAS created successfully.
+    }
+
+    res.status(201).json({ 
+      message: "Registration successful! Please check your email to verify." 
     });
+
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error("🔥 Global Register Error:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
+};
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const user = await User.findOne({ verificationToken: token });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired verification token." });
+    }
+
+    user.isVerified = true;
+    user.verificationToken = undefined; // Clear the token once used
+    await user.save();
+
+    res.status(200).json({ message: "Email verified successfully! You can now login." });
+  } catch (error) {
+    res.status(500).json({ message: "Verification failed", error: error.message });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Generate 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    user.verificationCode = code;
+    user.codeExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
+
+    await sendSecurityCode(user, code, 'password');
+
+    res.json({ message: "Security code sent to your email!" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    const user = await User.findOne({ 
+      email: email.toLowerCase(),
+      verificationCode: code,
+      codeExpires: { $gt: Date.now() }
+    });
+
+    if (!user) return res.status(400).json({ message: "Invalid or expired code" });
+
+    // Hash new password
+    // const salt = await bcrypt.genSalt(10);
+    // user.password = await bcrypt.hash(newPassword, salt);
+    
+    // Clear security fields
+    user.password = newPassword;
+    user.verificationCode = undefined;
+    user.codeExpires = undefined;
+    await user.save();
+
+    res.json({ message: "Password updated successfully!" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const resendVerification = async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email: email.toLowerCase() });
+
+  if (!user) return res.status(404).json({ message: "User not found" });
+  if (user.isVerified) return res.status(400).json({ message: "Already verified" });
+
+  // Use verificationToken to match your verifyEmail function
+  const newToken = crypto.randomBytes(32).toString('hex');
+  user.verificationToken = newToken; 
+  await user.save();
+
+  await sendVerificationEmail(user);
+
+  res.status(200).json({ message: "Verification email sent!" });
 };
 
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email: email.toLowerCase() });
+    console.log("User found:", !!user);
+    if (user) {
+      const isMatch = await bcrypt.compare(password, user.password);
+      console.log("Password Match:", isMatch);
+    }
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: "Invalid credentials!" });
+    }
+    // 🛑 CHECK VERIFICATION STATUS
+    if (!user.isVerified) {
+      return res.status(403).json({ 
+        message: "Please verify your email address before logging in." 
+      });
     }
     setTokenCookies(res, user);
 
