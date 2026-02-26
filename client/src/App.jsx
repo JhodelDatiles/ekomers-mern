@@ -14,6 +14,8 @@ import Navbar from "./components/NavBar.jsx";
 import LandingPage from "./pages/LandingPage.jsx";
 import Login from "./pages/LoginPage.jsx";
 import Register from "./pages/RegisterPage.jsx";
+import VerifyEmail from "./pages/VerifyEmail.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
 
 // BLOCK 4: ADMIN PAGES
 import AdminDashboardOverview from "./pages/adminpages/AdminDashboardOverview.jsx";
@@ -85,6 +87,8 @@ function App() {
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/verify-email/:token" element={<VerifyEmail />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
 
               {/* ADMIN ONLY ROUTES */}
               <Route element={<ProtectedRoutes allowedRoles={["admin"]} />}>

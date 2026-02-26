@@ -53,13 +53,17 @@ api.interceptors.response.use(
     const isPublicEndpoint = publicEndpoints.some(endpoint => {
       return requestUrl.endsWith(endpoint) || requestUrl.includes(endpoint);
     });
-
+    // 🚀 ADD THIS: If it's a public endpoint, don't try to refresh!
     if (isPublicEndpoint) {
-      console.log(`[API] Auth endpoint failed, not attempting refresh:`, originalRequest.url);
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+if (error.response?.status === 401 && !originalRequest._retry) {
+      // 1. Silent check: If we are already checking current user or refreshing, don't loop
+      if (requestUrl.includes('/auth/refresh-token')) {
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -69,14 +73,14 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-// ... inside your response interceptor try block ...
       try {
-        console.log('[API] Attempting token refresh...');
+        // Only log refresh attempt for non-auth-check requests to keep console clean
+        if (!requestUrl.includes('/auth/me')) {
+          console.log('[API] Session expired, attempting refresh...');
+        }
+        
         const response = await api.post('/auth/refresh-token');
         
-        // ⚡ INSTANT BROADCAST
-        // We take the fresh user data returned by the refresh-token endpoint
-        // and send it out via a CustomEvent. No need for other pages to re-fetch!
         const syncEvent = new CustomEvent('auth-synchronized', { 
           detail: response.data.user 
         });
@@ -84,19 +88,19 @@ api.interceptors.response.use(
         
         isRefreshing = false;
         processQueue(null); 
-        
-        console.log('[API] Token refreshed, retrying original request');
         return api(originalRequest);
       } catch (refreshError) {
-        console.error('[API] Token refresh failed, logging out');
         isRefreshing = false;
         processQueue(refreshError, null);
         
-        localStorage.removeItem('user');
-        
-        if (!window.location.pathname.includes('/login') && 
-            !window.location.pathname.includes('/register')) {
-          window.location.href = '/login'; 
+        // 2. Only log "failed" and redirect to login if it wasn't a silent initial check
+        if (!requestUrl.includes('/auth/me')) {
+          console.error('[API] Refresh failed, session cleared');
+          localStorage.removeItem('user');
+          if (!window.location.pathname.includes('/login') && 
+              !window.location.pathname.includes('/register')) {
+            window.location.href = '/login'; 
+          }
         }
         
         return Promise.reject(refreshError);
@@ -111,6 +115,23 @@ api.interceptors.response.use(
 export const authAPI = {
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
+    return response.data;
+  },
+  verifyEmail: async (token) => {
+    const response = await api.get(`/auth/verify-email/${token}`);
+    return response.data;
+  },
+  resendVerification: async (email) => {
+    const response = await api.post('/auth/resend-verification', { email });
+    return response.data;
+  },
+  forgotPassword: async (email) => {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+  resetPassword: async (data) => {
+    // data includes email, code, and newPassword
+    const response = await api.post('/auth/reset-password', data);
     return response.data;
   },
   login: async (credentials) => {
