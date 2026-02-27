@@ -30,7 +30,8 @@ export const createPaymentIntent = async (req, res) => {
             'card', 
             'gcash', 
             'paymaya', 
-            'grab_pay'
+            'grab_pay',
+            'qrph'
           ],
           payment_method_options: {
             card: { request_three_d_secure: 'any' }
