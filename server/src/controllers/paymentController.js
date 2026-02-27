@@ -26,7 +26,7 @@ export const createPaymentIntent = async (req, res) => {
         attributes: {
           amount: totalInCentavos,
           payment_method_allowed: [
-            paymentMethod || 'card' // 'card', 'gcash', 'grab_pay', 'paymaya'
+            paymentMethod || 'card', 'gcash', 'grab_pay', 'paymaya'
           ],
           payment_method_options: {
             card: { request_three_d_secure: 'any' }
