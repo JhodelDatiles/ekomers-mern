@@ -299,6 +299,14 @@ export const paymentAPI = {
     const response = await api.post('/payment/ewallet-source', data);
     return response.data;
   },
+  createQrPhPayment: async (data) => {
+    const response = await api.post('/payment/qrph', data);
+    return response.data;
+  },
+  checkQrPhStatus: async (paymentIntentId) => {
+    const response = await api.get(`/payment/qrph/status/${paymentIntentId}`);
+    return response.data;
+  },
 };
 
 // Review API
