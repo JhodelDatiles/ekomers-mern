@@ -29,9 +29,13 @@ const Checkout = () => {
   const [activeAddress, setActiveAddress] = useState(null);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
+  // --- NEW FEATURES STATE ---
+  const [qrCode, setQrCode] = useState(null);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [pollingId, setPollingId] = useState(null);
+
   /**
    * 🤖 AUTOMATED BACKGROUND SYNC
-   * This runs silently. The user never sees a "refresh" or a button.
    */
   const autoSyncNode = useCallback(async () => {
     if (isSyncing) return;
@@ -39,7 +43,6 @@ const Checkout = () => {
     try {
       const freshUser = await userAPI.getProfile();
       if (setUser) setUser(freshUser);
-      // Optional: console.log("Node Synchronized Automatically");
     } catch (err) {
       console.error("Auto-sync failed");
     } finally {
@@ -48,15 +51,39 @@ const Checkout = () => {
   }, [setUser, isSyncing]);
 
   /**
+   * 📡 PAYMENT POLLING LOGIC
+   */
+  const startPolling = (orderId) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await orderAPI.getOrderById(orderId);
+        const order = response.order;
+        if (order.status === 'Paid' || order.status === 'Order in Progress') {
+          clearInterval(interval);
+          setPollingId(null);
+          toast.success("Payment Received!");
+          navigate('/dashboard/my-orders');
+        }
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 3000);
+    setPollingId(interval);
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingId) clearInterval(pollingId);
+    };
+  }, [pollingId]);
+
+  /**
    * 📡 SMART OBSERVERS
-   * Automatically triggers sync on tab focus or global events.
    */
   useEffect(() => {
     const handleSync = () => autoSyncNode();
-
-    // Sync when user comes back from Settings/Profile tab
     window.addEventListener('focus', handleSync);
-    // Sync when Interceptor or Settings page signals a change
     window.addEventListener('auth-synchronized', handleSync);
     window.addEventListener('profileUpdated', handleSync);
 
@@ -69,12 +96,10 @@ const Checkout = () => {
 
   /**
    * 🛰️ ADDRESS STATE MANAGEMENT
-   * Keeps the selected address in sync with the fresh user data.
    */
   useEffect(() => {
     if (user?.address?.length > 0) {
       const stillExists = user.address.find(a => a._id === activeAddress?._id);
-      
       if (!activeAddress || !stillExists) {
         const defaultAddr = user.address.find(addr => addr.isDefault) || user.address[0];
         setActiveAddress(defaultAddr);
@@ -114,8 +139,14 @@ const Checkout = () => {
         items: checkoutItems 
       });
 
+      toast.dismiss(toastId);
+
       if (result.checkoutUrl) {
         window.location.href = result.checkoutUrl;
+      } else if (result.next_action && result.next_action.type === 'consume_qr') {
+        setQrCode(result.next_action.data.image_url);
+        setShowQrModal(true);
+        startPolling(result.orderId);
       }
     } catch (err) {
       toast.error("Dispatch Failed", { id: toastId });
@@ -124,7 +155,6 @@ const Checkout = () => {
     }
   };
 
-  // ... inside the component
   if (authLoading) {
     return <CheckoutSkeleton />;
   }
@@ -145,7 +175,6 @@ const Checkout = () => {
                 <div className="flex justify-between items-start">
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
-                        {/* The dot glows blue during the silent auto-sync */}
                         <div className={`w-3 h-3 rounded-full transition-all duration-500 shadow-[0_0_15px_rgba(var(--primary),0.5)] ${isSyncing ? 'bg-blue-500 scale-125' : 'bg-primary animate-pulse'}`} />
                         <span className="text-xs font-black uppercase italic text-primary tracking-[0.2em]">
                           {isSyncing ? 'Synchronizing Node...' : 'Waypoint Locked'}
@@ -255,7 +284,38 @@ const Checkout = () => {
         </div>
       </div>
 
-      {/* MODAL REMAINED SAME BUT REMOVED REDUNDANT BUTTONS */}
+      {/* 💳 QR PH PAYMENT MODAL */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center backdrop-blur-xl bg-black/90 p-4">
+          <div className="bg-[#121212] border border-primary/20 p-8 rounded-[40px] max-w-sm w-full text-center shadow-[0_0_50px_rgba(var(--primary),0.1)]">
+            <h2 className="text-2xl font-black uppercase italic text-white mb-2">Scan to Pay</h2>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-6">GCash • Maya • ShopeePay</p>
+            
+            <div className="bg-white p-4 rounded-3xl mb-6 inline-block">
+              <img src={qrCode} alt="Payment QR" className="w-64 h-64" />
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-center gap-2 text-primary animate-pulse">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-[10px] font-black uppercase italic">Awaiting Confirmation...</span>
+              </div>
+              <button 
+                onClick={() => {
+                  if (pollingId) clearInterval(pollingId);
+                  setPollingId(null);
+                  setShowQrModal(false);
+                }}
+                className="text-[10px] font-black uppercase text-white/20 hover:text-error transition-all"
+              >
+                Cancel Transaction
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🛰️ ADDRESS SELECTION MODAL */}
       {isAddressModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-black/80 animate-in fade-in">
           <div className="bg-[#121212] border border-white/10 w-full max-w-lg rounded-[40px] overflow-hidden shadow-2xl">
