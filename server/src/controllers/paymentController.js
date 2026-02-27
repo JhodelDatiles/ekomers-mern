@@ -25,8 +25,12 @@ export const createPaymentIntent = async (req, res) => {
       data: {
         attributes: {
           amount: totalInCentavos,
+          // ✅ CORRECT SYNTAX
           payment_method_allowed: [
-            paymentMethod || 'card', 'gcash', 'grab_pay', 'paymaya'
+            'card', 
+            'gcash', 
+            'paymaya', 
+            'grab_pay'
           ],
           payment_method_options: {
             card: { request_three_d_secure: 'any' }
