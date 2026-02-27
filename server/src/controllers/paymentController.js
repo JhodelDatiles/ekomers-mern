@@ -3,6 +3,8 @@ import Paymongo from 'paymongo';
 import Order from '../models/orderSchema.js';
 import Cart from '../models/cartSchema.js';
 import Product from '../models/productSchema.js';
+import axios from 'axios';
+
 
 const paymongo = new Paymongo(config.paymongoSecret);
 
@@ -199,7 +201,7 @@ export const createEWalletSource = async (req, res) => {
       data: {
         attributes: {
           type: type, // 'gcash' or 'grab_pay'
-          amount: 2000,
+          amount: totalInCentavos,
           currency: 'PHP',
           redirect: {
             success: `${config.clientUrl}/payment/success`,
@@ -217,5 +219,87 @@ export const createEWalletSource = async (req, res) => {
   } catch (error) {
     console.error('E-Wallet Error:', error);
     res.status(500).json({ message: "Failed to create e-wallet payment" });
+  }
+};
+
+export const createQrPhPayment = async (req, res) => {
+  try {
+    const { amount, items, shippingInfo } = req.body;
+    const secretKey = config.paymongoSecret.trim();
+    const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
+
+    // Step 1: Create Payment Intent
+    const intentRes = await axios.post('https://api.paymongo.com/v1/payment_intents', {
+      data: {
+        attributes: {
+          amount: Math.round(amount * 100),
+          payment_method_allowed: ['qrph'],
+          currency: 'PHP',
+          description: 'EKOMERS Order Payment',
+          metadata: {
+            userId: String(req.user.id),
+            shippingInfo: JSON.stringify(shippingInfo),
+            items: JSON.stringify(items)
+          }
+        }
+      }
+    }, { headers: { authorization: authHeader, 'Content-Type': 'application/json' } });
+
+    const paymentIntentId = intentRes.data.data.id;
+    const clientKey = intentRes.data.data.attributes.client_key;
+
+    // Step 2: Create QR PH Payment Method
+    const methodRes = await axios.post('https://api.paymongo.com/v1/payment_methods', {
+      data: {
+        attributes: { type: 'qrph' }
+      }
+    }, { headers: { authorization: authHeader, 'Content-Type': 'application/json' } });
+
+    const paymentMethodId = methodRes.data.data.id;
+
+    // Step 3: Attach Payment Method to Intent
+    const attachRes = await axios.post(
+      `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}/attach`,
+      {
+        data: {
+          attributes: {
+            payment_method: paymentMethodId,
+            client_key: clientKey
+          }
+        }
+      },
+      { headers: { authorization: authHeader, 'Content-Type': 'application/json' } }
+    );
+
+    const nextAction = attachRes.data.data.attributes.next_action;
+
+    res.status(200).json({
+      paymentIntentId,
+      qrImage: nextAction?.data?.image_url,
+      status: attachRes.data.data.attributes.status
+    });
+
+  } catch (error) {
+    console.error('❌ QR PH Error:', error.response?.data || error.message);
+    res.status(500).json({ message: 'QR PH payment failed' });
+  }
+};
+
+export const checkPaymentIntentStatus = async (req, res) => {
+  try {
+    const { paymentIntentId } = req.params;
+    const secretKey = config.paymongoSecret.trim();
+    const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
+
+    const response = await axios.get(
+      `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}`,
+      { headers: { authorization: authHeader } }
+    );
+
+    const status = response.data.data.attributes.status;
+    res.status(200).json({ status });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to check status' });
   }
 };
