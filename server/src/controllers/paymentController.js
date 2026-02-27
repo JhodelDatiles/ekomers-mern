@@ -1,9 +1,10 @@
+import {config} from '../envconfig.js';
 import Paymongo from 'paymongo';
 import Order from '../models/orderSchema.js';
 import Cart from '../models/cartSchema.js';
 import Product from '../models/productSchema.js';
 
-const paymongo = new Paymongo(process.env.PAYMONGO_SECRET_KEY || "dummy-key");
+const paymongo = new Paymongo(config.paymongoSecret);
 
 // Create Payment Intent (Step 1: Initialize payment)
 export const createPaymentIntent = async (req, res) => {
@@ -196,8 +197,8 @@ export const createEWalletSource = async (req, res) => {
           amount: totalInCentavos,
           currency: 'PHP',
           redirect: {
-            success: `${process.env.FRONTEND_URL}/payment/success`,
-            failed: `${process.env.FRONTEND_URL}/payment/failed`
+            success: `${config.clientUrl}/payment/success`,
+            failed: `${config.clientUrl}/payment/failed`
           }
         }
       }

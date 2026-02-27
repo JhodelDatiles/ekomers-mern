@@ -1,13 +1,11 @@
 import axios from 'axios';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
 import Order from '../models/orderSchema.js';
 import Cart from '../models/cartSchema.js';
 import Product from '../models/productSchema.js';
 import User from '../models/userSchema.js';
 import { sendOrderConfirmation } from '../services/emailService.js';
-
-dotenv.config();
+import {config} from '../envconfig.js';
 
 export const initiatePayMongoCheckout = async (req, res) => {
   try {
@@ -38,7 +36,7 @@ export const initiatePayMongoCheckout = async (req, res) => {
       instructions: String(shippingInfo.deliveryInstructions || "")
     };
 
-    const secretKey = process.env.PAYMONGO_SECRET_KEY.trim();
+    const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
 
     const lineItems = items.map(item => ({
@@ -64,8 +62,8 @@ export const initiatePayMongoCheckout = async (req, res) => {
             show_line_items: true,
             payment_method_types: ['gcash', 'paymaya', 'card', 'grab_pay'],
             line_items: lineItems,
-            success_url: `${process.env.FRONTEND_URL}/payment-success`,
-            cancel_url: `${process.env.FRONTEND_URL}/checkout?payment=cancelled`,
+            success_url: `${config.clientUrl}/payment-success`,
+            cancel_url: `${config.clientUrl}/checkout?payment=cancelled`,
             metadata: metadata
           }
         }

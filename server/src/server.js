@@ -1,3 +1,4 @@
+import { config } from './envconfig.js';
 import express from 'express';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
@@ -24,14 +25,16 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1); // Allows cookies to be secure over ngrok
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';``
 
 // 1. CORS CONFIGURATION
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:3000',
-  'https://appointed-melida-biserially.ngrok-free.dev', 
-  process.env.FRONTEND_URL
+  'http://localhost:5000',
+  'https://appointed-melida-biserially.ngrok-free.dev',
+  config.clientUrl
 ].filter(Boolean);
 
 app.use(cors({
@@ -57,7 +60,6 @@ app.use(cors({
 }));
 
 // 2. BODY PARSING & WEBHOOK RAW BODY CAPTURE
-// 🚀 CRITICAL: We capture the raw buffer here for PayMongo Signature Verification
 app.use(express.json({
   verify: (req, res, buf) => {
     if (req.originalUrl.includes('/api/orders/webhook')) {
@@ -70,7 +72,7 @@ app.use(cookieParser());
 
 // 3. HEALTH CHECK
 app.get('/', (req, res) => {
-  res.json({ message: 'E-commerce API is running!', mode: process.env.NODE_ENV });
+  res.json({ message: 'E-commerce API is running!', mode: isProduction ? 'production' : 'development'});
 });
 
 // 4. API ROUTES
@@ -95,12 +97,12 @@ app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found` });
 });
 
-// 7. GLOBAL ERROR HANDLER
+// 7. GLOBAL ERROR HANDLER/ throw an error if the NODE_ENV is on development
 app.use((err, req, res, next) => {
   console.error('🔥 Server Error:', err.stack);
   res.status(err.status || 500).json({ 
     message: err.message || 'Something went wrong!',
-    error: process.env.NODE_ENV === 'production' ? {} : err 
+    error: isProduction ? {} : err 
   });
 });
 
@@ -110,7 +112,8 @@ const startServer = async () => {
     await conn(); // Database Connection
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📍 Webhook URL: https://appointed-melida-biserially.ngrok-free.dev/api/orders/webhook`);
+      console.log(` Test webhook URL: https://appointed-melida-biserially.ngrok-free.dev/api/orders/webhook`);
+      console.log(` Live webhook URL: https://ekomers-mern.onrender.com/api/orders/webhook`);
     });
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);

@@ -4,16 +4,17 @@ import Cart from '../models/cartSchema.js';
 import Product from '../models/productSchema.js';
 import User from '../models/userSchema.js';
 import { sendOrderConfirmation } from '../services/emailService.js';
+import {config} from '../envconfig.js';
+
 
 export const handlePayMongoWebhook = async (req, res) => {
   
   console.log("🚀 Webhook hit! Checking signature..."); // ADD THIS LINE
   const signature = req.headers['paymongo-signature'];
-  const webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
-
+  const webhookSecret = config.paymongoWebhooks;
   // 1. Verify Webhook Authenticity
   // Note: req.body must be the RAW buffer for verification
-  const payload = JSON.stringify(req.body); 
+  const payload = req.rawBody;
   const [t, te, li] = signature.split(',');
   const timestamp = t.split('=')[1];
   const paymongoHash = te ? te.split('=')[1] : li.split('=')[1];

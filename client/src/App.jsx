@@ -1,12 +1,17 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import { Toaster, ToastBar } from "react-hot-toast";
 
 // BLOCK 1: CONTEXT & AUTH IMPORTS
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { WishlistProvider } from "./context/WishlistContext.jsx";
-import { CartProvider } from "./context/CartContext.jsx"; 
-import api from './services/api'
+import { CartProvider } from "./context/CartContext.jsx";
+import api from "./services/api";
 import ProtectedRoutes from "./components/ProtectedRoutes.jsx";
 
 // BLOCK 2: SHARED COMPONENTS
@@ -40,27 +45,34 @@ import PrivacySettings from "./pages/userpages/PrivacySettings.jsx";
 import UserOrdersPage from "./pages/userpages/UserOrdersPage.jsx";
 
 // BLOCK 6: CHECKOUT & PAYMENT PAGES
-import Checkout from "./pages/userpages/Checkout.jsx"; 
-import PaymentSuccess from "./pages/userpages/PaymentSuccess.jsx"; 
+import Checkout from "./pages/userpages/Checkout.jsx";
+import PaymentSuccess from "./pages/userpages/PaymentSuccess.jsx";
 
 function App() {
   useEffect(() => {
     const applyGlobalSettings = async () => {
       try {
-        const { data } = await api.get('/settings');
+        const { data } = await api.get("/settings");
         if (data) {
-          // 1. Apply Tab Title
-          document.title = data.storeName || "My Store";
-          
-          // 2. Apply Favicon
-          if (data.logoUrl) {
+          // 1. Title
+          document.title = data.storeName || "MN+LA";
+
+          // 2. Favicon
+          const iconUrl = data.storeLogo?.url;
+          if (iconUrl) {
             let link = document.querySelector("link[rel~='icon']");
             if (!link) {
-              link = document.createElement('link');
-              link.rel = 'icon';
-              document.getElementsByTagName('head')[0].appendChild(link);
+              link = document.createElement("link");
+              link.rel = "icon";
+              document.head.appendChild(link);
             }
-            link.href = data.logoUrl;
+            link.href = iconUrl;
+          }
+
+          // 3. Meta Description (SEO)
+          const meta = document.querySelector('meta[name="description"]');
+          if (meta && data.storeDescription) {
+            meta.setAttribute("content", data.storeDescription);
           }
         }
       } catch (err) {
@@ -81,17 +93,17 @@ function App() {
               toastOptions={{
                 duration: 3000,
                 style: {
-                  borderRadius: '16px',
-                  padding: '16px',
-                  fontWeight: '900',
-                  textTransform: 'uppercase',
-                  fontSize: '11px',
-                  letterSpacing: '0.1em',
-                  fontStyle: 'italic',
-                  border: '1px solid oklch(var(--p) / 0.2)',
-                  background: '#121212',
-                  color: '#fff'
-                }
+                  borderRadius: "16px",
+                  padding: "16px",
+                  fontWeight: "900",
+                  textTransform: "uppercase",
+                  fontSize: "11px",
+                  letterSpacing: "0.1em",
+                  fontStyle: "italic",
+                  border: "1px solid oklch(var(--p) / 0.2)",
+                  background: "#121212",
+                  color: "#fff",
+                },
               }}
             >
               {(t) => (
@@ -100,13 +112,13 @@ function App() {
                   style={{
                     ...t.style,
                     animation: t.visible
-                      ? 'slideInRight 0.35s ease-out'
-                      : 'slideOutRight 0.35s ease-in forwards',
+                      ? "slideInRight 0.35s ease-out"
+                      : "slideOutRight 0.35s ease-in forwards",
                   }}
                 />
               )}
             </Toaster>
-            
+
             <Navbar />
 
             <Routes>
@@ -123,26 +135,42 @@ function App() {
                   <Route index element={<AdminDashboardOverview />} />
                   <Route path="products" element={<AdminProducts />} />
                   <Route path="orders" element={<AdminOrders />} />
-                  <Route path="sales" element={<SalesReport />} /> {/* 👈 Add this line */}
+                  <Route path="sales" element={<SalesReport />} />{" "}
+                  {/* 👈 Add this line */}
                   <Route path="users" element={<AdminUserManagement />} />
                   <Route path="settings" element={<AdminSettings />} />
-                  <Route path="settings/privacy" element={<AdminPrivacySettings />} /> {/* SHARED COMPONENT */}
-                  <Route path="configuration" element={<AdminConfiguration />} />
+                  <Route
+                    path="settings/privacy"
+                    element={<AdminPrivacySettings />}
+                  />{" "}
+                  {/* SHARED COMPONENT */}
+                  <Route
+                    path="configuration"
+                    element={<AdminConfiguration />}
+                  />
                 </Route>
               </Route>
 
               {/* USER & ADMIN PROTECTED ROUTES */}
-              <Route element={<ProtectedRoutes allowedRoles={["user", "admin"]} />}>
+              <Route
+                element={<ProtectedRoutes allowedRoles={["user", "admin"]} />}
+              >
                 <Route path="/dashboard" element={<UnifiedDashboard />}>
                   <Route index element={<DashboardOverview />} />
                   <Route path="cart" element={<CartPage />} />
                   <Route path="wishlist" element={<WishlistPage />} />
                   <Route path="my-orders" element={<UserOrdersPage />} />
-                  
                   {/* SETTINGS NESTED ROUTES */}
                   <Route path="settings" element={<UserSettings />} />
-                  <Route path="settings/addresses" element={<UserAddressesSettings />} />
-                  <Route path="settings/privacy" element={<PrivacySettings />} /> {/* SHARED COMPONENT */}
+                  <Route
+                    path="settings/addresses"
+                    element={<UserAddressesSettings />}
+                  />
+                  <Route
+                    path="settings/privacy"
+                    element={<PrivacySettings />}
+                  />{" "}
+                  {/* SHARED COMPONENT */}
                 </Route>
 
                 {/* LOGISTICS & CHECKOUT FLOW */}
