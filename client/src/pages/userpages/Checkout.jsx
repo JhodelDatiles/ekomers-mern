@@ -70,19 +70,27 @@ const handleQrPhPayment = async () => {
   setLoading(true);
   const toastId = toast.loading("Generating QR Code...");
   try {
-    const result = await paymentAPI.createQrPhPayment({...});
-    console.log("Result:", result);
-    
+    const result = await paymentAPI.createQrPhPayment({
+      amount: checkoutTotal,
+      items: checkoutItems,
+      shippingInfo: {
+        fullName: activeAddress.fullName,
+        address: activeAddress.address || activeAddress.street,
+        city: activeAddress.city,
+        postalCode: activeAddress.postalCode,
+        contactNumber: activeAddress.contactNumber,
+      }
+    });
+
     if (!result.qrImage) {
-      toast.error(`No QR returned. Status: ${result.status}`); // ← shows status
+      toast.error(`No QR returned. Status: ${result.status}`);
       return;
     }
-    
+
     setQrCode(result.qrImage);
     setShowQrModal(true);
     startPollingIntent(result.paymentIntentId);
   } catch (err) {
-    // Show actual error message
     const errMsg = err.response?.data?.message || err.message || "Unknown error";
     toast.error(`Failed: ${errMsg}`);
   } finally {
@@ -90,7 +98,6 @@ const handleQrPhPayment = async () => {
     toast.dismiss(toastId);
   }
 };
-
   useEffect(() => {
     return () => {
       if (pollingId) clearInterval(pollingId);
