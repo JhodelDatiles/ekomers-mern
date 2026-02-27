@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import conn from './config/db.js';
+import path from 'path';
 
 // Import routes
 import authRoutes from './routes/authRoutes.js';
@@ -25,8 +26,18 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1); // Allows cookies to be secure over ngrok
 const PORT = process.env.PORT || 5000;
-const isProduction = process.env.NODE_ENV === 'production';``
+const isProduction = process.env.NODE_ENV === 'production';
+const __dirname = path.resolve();
 
+if (process.env.NODE_ENV === 'production') {
+  // 1. Serve static files from the frontend 'dist' folder
+  app.use(express.static(path.join(__dirname, '/client/dist')));
+
+  // 2. The "Catch-all" - any non-api route sends the index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
+  });
+}
 // 1. CORS CONFIGURATION
 const allowedOrigins = [
   'http://localhost:5173',
