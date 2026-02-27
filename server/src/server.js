@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import conn from './config/db.js';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Import routes
 import authRoutes from './routes/authRoutes.js';
@@ -27,7 +28,8 @@ const app = express();
 app.set('trust proxy', 1); // Allows cookies to be secure over ngrok
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
-const __dirname = path.resolve();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 1. CORS CONFIGURATION
 const allowedOrigins = [
@@ -73,7 +75,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // 3. HEALTH CHECK
-app.get('/', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({ message: 'E-commerce API is running!', mode: isProduction ? 'production' : 'development'});
 });
 
@@ -94,16 +96,13 @@ app.use('/api/', adminRoutes); // Matching your settingsAPI in frontend
 app.use('/api/admin/products', adminProductRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
 
-// --- MOVE THIS HERE (Bottom of Routes) ---
+// In production block:
 if (process.env.NODE_ENV === 'production') {
-  // Serve static files from the frontend 'dist' folder
-  // Note: Since server.js is inside the 'server' folder, 
-  // we go UP one level to find the 'client' folder
-  app.use(express.static(path.join(__dirname, 'client', 'dist')));
-
-  // The "Catch-all" - any non-api route sends the index.html
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'client', 'dist', 'index.html'));
+  const clientDistPath = path.join(__dirname, '..', '..', 'client', 'dist');
+  
+  app.use(express.static(clientDistPath));
+  app.get('/*splat', (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
   });
 }
 
