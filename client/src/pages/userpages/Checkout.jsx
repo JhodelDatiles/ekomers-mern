@@ -1,16 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { 
-  Phone, 
-  Loader2, 
-  Hash, 
-  Navigation, 
-  Map as MapIcon, 
-  ShieldCheck, 
-  Edit3,
-  X,
-  CheckCircle2,
-  QrCode
+  Phone, Loader2, Hash, Navigation, Map as MapIcon, 
+  ShieldCheck, Edit3, X, CheckCircle2, QrCode
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { orderAPI, userAPI, paymentAPI } from "../../services/api"; 
@@ -29,10 +21,10 @@ const Checkout = () => {
   const [isSyncing, setIsSyncing] = useState(false); 
   const [activeAddress, setActiveAddress] = useState(null);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
-
   const [qrCode, setQrCode] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
   const [pollingId, setPollingId] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null); // ← shows raw next_action on screen
 
   const autoSyncNode = useCallback(async () => {
     if (isSyncing) return;
@@ -65,43 +57,47 @@ const Checkout = () => {
     setPollingId(interval);
   };
 
-const handleQrPhPayment = async () => {
-  if (!activeAddress) return toast.error("No shipping node detected.");
-  setLoading(true);
-  const toastId = toast.loading("Generating QR Code...");
-  try {
-    const result = await paymentAPI.createQrPhPayment({
-      amount: checkoutTotal,
-      items: checkoutItems,
-      shippingInfo: {
-        fullName: activeAddress.fullName,
-        address: activeAddress.address || activeAddress.street,
-        city: activeAddress.city,
-        postalCode: activeAddress.postalCode,
-        contactNumber: activeAddress.contactNumber,
+  const handleQrPhPayment = async () => {
+    if (!activeAddress) return toast.error("No shipping node detected.");
+    setLoading(true);
+    const toastId = toast.loading("Generating QR Code...");
+    try {
+      const result = await paymentAPI.createQrPhPayment({
+        amount: checkoutTotal,
+        items: checkoutItems,
+        shippingInfo: {
+          fullName: activeAddress.fullName,
+          address: activeAddress.address || activeAddress.street,
+          city: activeAddress.city,
+          postalCode: activeAddress.postalCode,
+          contactNumber: activeAddress.contactNumber,
+        }
+      });
+
+      console.log("🖼️ Full API result:", JSON.stringify(result, null, 2));
+      setDebugInfo(result.debugNextAction); // store for on-screen display
+
+      if (!result.qrImage) {
+        toast.error(`No QR. Status: ${result.status}`, { duration: 5000 });
+        setShowQrModal(true); // open modal to show debug info
+        return;
       }
-    });
 
-    if (!result.qrImage) {
-      toast.error(`No QR returned. Status: ${result.status}`);
-      return;
+      setQrCode(result.qrImage);
+      setShowQrModal(true);
+      startPollingIntent(result.paymentIntentId);
+    } catch (err) {
+      console.error("QR PH Error:", err.response?.data);
+      const errMsg = err.response?.data?.message || err.message || "Unknown error";
+      toast.error(`Failed: ${errMsg}`);
+    } finally {
+      setLoading(false);
+      toast.dismiss(toastId);
     }
+  };
 
-    setQrCode(result.qrImage);
-    setShowQrModal(true);
-    startPollingIntent(result.paymentIntentId);
-  } catch (err) {
-    const errMsg = err.response?.data?.message || err.message || "Unknown error";
-    toast.error(`Failed: ${errMsg}`);
-  } finally {
-    setLoading(false);
-    toast.dismiss(toastId);
-  }
-};
   useEffect(() => {
-    return () => {
-      if (pollingId) clearInterval(pollingId);
-    };
+    return () => { if (pollingId) clearInterval(pollingId); };
   }, [pollingId]);
 
   useEffect(() => {
@@ -127,17 +123,12 @@ const handleQrPhPayment = async () => {
   }, [user, activeAddress]); 
 
   useEffect(() => {
-    if (!authLoading && checkoutItems.length === 0) {
-      navigate('/cart');
-    }
+    if (!authLoading && checkoutItems.length === 0) navigate('/cart');
   }, [checkoutItems, navigate, authLoading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!activeAddress) {
-      toast.error("No shipping node detected.");
-      return;
-    }
+    if (!activeAddress) return toast.error("No shipping node detected.");
     setLoading(true);
     const toastId = toast.loading("Authorizing Dispatch...");
     try {
@@ -153,9 +144,7 @@ const handleQrPhPayment = async () => {
         items: checkoutItems 
       });
       toast.dismiss(toastId);
-      if (result.checkoutUrl) {
-        window.location.href = result.checkoutUrl;
-      }
+      if (result.checkoutUrl) window.location.href = result.checkoutUrl;
     } catch (err) {
       toast.error("Dispatch Failed", { id: toastId });
     } finally {
@@ -163,9 +152,7 @@ const handleQrPhPayment = async () => {
     }
   };
 
-  if (authLoading) {
-    return <CheckoutSkeleton />;
-  }
+  if (authLoading) return <CheckoutSkeleton />;
 
   return (
     <div className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-10 animate-in fade-in duration-700">
@@ -182,7 +169,7 @@ const handleQrPhPayment = async () => {
             <div className="flex justify-between items-start">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full transition-all duration-500 shadow-[0_0_15px_rgba(var(--primary),0.5)] ${isSyncing ? 'bg-blue-500 scale-125' : 'bg-primary animate-pulse'}`} />
+                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${isSyncing ? 'bg-blue-500 scale-125' : 'bg-primary animate-pulse'}`} />
                   <span className="text-xs font-black uppercase italic text-primary tracking-[0.2em]">
                     {isSyncing ? 'Synchronizing Node...' : 'Waypoint Locked'}
                   </span>
@@ -191,18 +178,13 @@ const handleQrPhPayment = async () => {
                   {activeAddress?.label || 'Primary Node'}
                 </h3>
               </div>
-              <button 
-                onClick={() => setIsAddressModalOpen(true)}
-                className="bg-white/5 hover:bg-primary hover:text-black p-4 rounded-2xl transition-all group"
-              >
+              <button onClick={() => setIsAddressModalOpen(true)} className="bg-white/5 hover:bg-primary hover:text-black p-4 rounded-2xl transition-all group">
                 <Edit3 size={20} className="group-active:scale-90" />
               </button>
             </div>
-            <div className="flex gap-4">
-              <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
-                <Navigation size={10} /> Sector: {activeAddress?.city || 'Unspecified Sector'}
-              </p>
-            </div>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
+              <Navigation size={10} /> Sector: {activeAddress?.city || 'Unspecified Sector'}
+            </p>
           </div>
         </div>
 
@@ -246,7 +228,7 @@ const handleQrPhPayment = async () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: TOTALS */}
+      {/* RIGHT COLUMN */}
       <div className="lg:col-span-4">
         <div className="sticky top-24 bg-primary text-black rounded-[40px] p-10 shadow-2xl">
           <h3 className="font-black uppercase italic text-2xl mb-3 border-b-2 border-black/10 pb-4">Order Details</h3>
@@ -258,43 +240,36 @@ const handleQrPhPayment = async () => {
                   <span className="leading-tight tracking-tighter">
                     {item.quantity}x {item.productId?.name || item.name}
                   </span>
-                  {item.size && (
-                    <span className="text-[9px] opacity-70 mt-1 font-black italic">SIZE: {item.size}</span>
-                  )}
+                  {item.size && <span className="text-[9px] opacity-70 mt-1 font-black italic">SIZE: {item.size}</span>}
                 </div>
-                <span className="font-black text-sm italic">
-                  ₱{(item.price * item.quantity).toLocaleString()}
-                </span>
+                <span className="font-black text-sm italic">₱{(item.price * item.quantity).toLocaleString()}</span>
               </div>
             ))}
           </div>
 
           <div className="border-t-2 border-black/10 pt-8 mb-8">
-            <div className="flex flex-col">
-              <span className="text-[10px] font-black uppercase opacity-40 mb-1">Total Amount</span>
-              <span className="text-5xl font-black italic tracking-tighter leading-none">
-                ₱{checkoutTotal.toLocaleString()}
-              </span>
-            </div>
+            <span className="text-[10px] font-black uppercase opacity-40 mb-1 block">Total Amount</span>
+            <span className="text-5xl font-black italic tracking-tighter leading-none">
+              ₱{checkoutTotal.toLocaleString()}
+            </span>
           </div>
 
-          {/* ✅ MAIN CHECKOUT BUTTON */}
-          {/* <button 
+          {/* MAIN CHECKOUT BUTTON */}
+          <button 
             onClick={handleSubmit} 
             disabled={loading || !activeAddress} 
             className="bg-black hover:bg-black/90 text-white w-full h-24 rounded-[28px] font-black uppercase italic text-xl transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-20 mb-3"
           >
             {loading ? <Loader2 className="animate-spin" /> : <>Checkout <ShieldCheck size={20} /></>}
-          </button> */}
+          </button>
 
-          {/* ✅ QR PH BUTTON — CORRECTLY PLACED HERE, NOT IN MODAL */}
+          {/* QR PH BUTTON */}
           <button
             onClick={handleQrPhPayment}
             disabled={loading || !activeAddress}
             className="bg-black/10 hover:bg-black/20 text-black w-full h-14 rounded-[24px] font-black uppercase italic text-sm transition-all active:scale-95 flex items-center justify-center gap-2 border-2 border-black/20 disabled:opacity-20"
           >
-            <QrCode size={18} />
-            Pay via QR PH
+            <QrCode size={18} /> Pay via QR PH
           </button>
 
           <p className="text-center text-[9px] font-bold uppercase opacity-40 mt-3 tracking-widest">
@@ -303,33 +278,41 @@ const handleQrPhPayment = async () => {
         </div>
       </div>
 
-      {/* ✅ QR MODAL — ONLY SHOWS QR + WAITING STATE + CANCEL */}
+      {/* QR MODAL */}
       {showQrModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center backdrop-blur-xl bg-black/90 p-4">
           <div className="bg-[#121212] border border-primary/20 p-8 rounded-[40px] max-w-sm w-full text-center shadow-[0_0_50px_rgba(var(--primary),0.1)]">
             <h2 className="text-2xl font-black uppercase italic text-white mb-2">Scan to Pay</h2>
             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-6">GCash • Maya • ShopeePay</p>
             
-            <div className="bg-white p-4 rounded-3xl mb-6 inline-block">
+            <div className="bg-white p-4 rounded-3xl mb-6 inline-block w-full">
               {qrCode ? (
-                <img src={qrCode} alt="Payment QR" className="w-64 h-64" />
+                <img src={qrCode} alt="Payment QR" className="w-64 h-64 mx-auto" />
               ) : (
-                <div className="w-64 h-64 flex items-center justify-center">
-                  <Loader2 size={40} className="animate-spin text-gray-400" />
+                /* DEBUG PANEL — shows raw next_action so we can find the correct image path */
+                <div className="w-full min-h-32 flex flex-col items-start justify-start p-2 text-left">
+                  <p className="text-red-500 text-[9px] font-bold mb-2 uppercase">Debug: next_action structure</p>
+                  <pre className="text-[8px] text-gray-700 overflow-auto max-h-48 w-full break-all whitespace-pre-wrap">
+                    {debugInfo ? JSON.stringify(debugInfo, null, 2) : "null — no next_action returned"}
+                  </pre>
                 </div>
               )}
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-center gap-2 text-primary animate-pulse">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-[10px] font-black uppercase italic">Awaiting Confirmation...</span>
-              </div>
+              {qrCode && (
+                <div className="flex items-center justify-center gap-2 text-primary animate-pulse">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-[10px] font-black uppercase italic">Awaiting Confirmation...</span>
+                </div>
+              )}
               <button 
                 onClick={() => {
                   if (pollingId) clearInterval(pollingId);
                   setPollingId(null);
                   setShowQrModal(false);
+                  setDebugInfo(null);
+                  setQrCode(null);
                 }}
                 className="text-[10px] font-black uppercase text-white/20 hover:text-error transition-all"
               >
@@ -340,7 +323,7 @@ const handleQrPhPayment = async () => {
         </div>
       )}
 
-      {/* ADDRESS SELECTION MODAL */}
+      {/* ADDRESS MODAL */}
       {isAddressModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-black/80 animate-in fade-in">
           <div className="bg-[#121212] border border-white/10 w-full max-w-lg rounded-[40px] overflow-hidden shadow-2xl">
