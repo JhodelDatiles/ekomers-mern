@@ -279,13 +279,13 @@ const handleQrPhPayment = async () => {
           </div>
 
           {/* ✅ MAIN CHECKOUT BUTTON */}
-          <button 
+          {/* <button 
             onClick={handleSubmit} 
             disabled={loading || !activeAddress} 
             className="bg-black hover:bg-black/90 text-white w-full h-24 rounded-[28px] font-black uppercase italic text-xl transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-20 mb-3"
           >
             {loading ? <Loader2 className="animate-spin" /> : <>Checkout <ShieldCheck size={20} /></>}
-          </button>
+          </button> */}
 
           {/* ✅ QR PH BUTTON — CORRECTLY PLACED HERE, NOT IN MODAL */}
           <button
