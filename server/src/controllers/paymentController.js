@@ -278,6 +278,8 @@ export const createQrPhPayment = async (req, res) => {
       qrImage: nextAction?.data?.image_url,
       status: attachRes.data.data.attributes.status
     });
+    console.log("🔑 Using key:", config.paymongoSecret?.substring(0, 10));
+console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
 
   } catch (error) {
     console.error('❌ QR PH Error:', error.response?.data || error.message);
