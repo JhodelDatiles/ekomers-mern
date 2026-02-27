@@ -199,7 +199,7 @@ export const createEWalletSource = async (req, res) => {
       data: {
         attributes: {
           type: type, // 'gcash' or 'grab_pay'
-          amount: totalInCentavos,
+          amount: 2000,
           currency: 'PHP',
           redirect: {
             success: `${config.clientUrl}/payment/success`,
