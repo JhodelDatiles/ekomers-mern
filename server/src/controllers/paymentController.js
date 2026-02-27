@@ -275,11 +275,14 @@ export const createQrPhPayment = async (req, res) => {
 
     res.status(200).json({
       paymentIntentId,
-      qrImage: nextAction?.data?.image_url,
+      qrImage: nextAction?.data?.image_url 
+            || nextAction?.image_url                   // ← try this
+            || nextAction?.data?.qr_image              // ← or this
+            || nextAction?.qr_image,    
       status: attachRes.data.data.attributes.status
     });
     console.log("🔑 Using key:", config.paymongoSecret?.substring(0, 10));
-console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
+    console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
 
   } catch (error) {
     console.error('❌ QR PH Error:', error.response?.data || error.message);
