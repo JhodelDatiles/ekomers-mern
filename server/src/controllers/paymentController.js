@@ -284,7 +284,7 @@ export const createQrPhPayment = async (req, res) => {
     console.log("✅ Step 3 - Status:", attrs.status);
     console.log("🔍 next_action FULL:", JSON.stringify(nextAction, null, 2));
 
-    const qrImage = nextAction?.data?.image_url
+    const qrImage = nextAction?.code?.image_url
       || nextAction?.image_url
       || nextAction?.data?.qr_image
       || nextAction?.qr_image
