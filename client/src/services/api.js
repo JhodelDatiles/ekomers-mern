@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_URL_PROD || 
-                import.meta.env.VITE_API_URL_NGROK || 
-                'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_URL_PROD || '/api';
 
 // Create axios instance
 const api = axios.create({
