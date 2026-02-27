@@ -1,5 +1,6 @@
 import transporter from '../config/email.js';
 import { orderConfirmationEmail, verificationEmailTemplate } from '../utils/emailTemplates.js';
+import {config} from '../envconfig.js';
 
 // Logic for Order Emails
 export const sendOrderConfirmation = async (order, user) => {
@@ -45,7 +46,7 @@ export const sendVerificationEmail = async (user) => {
     
     if (!token) throw new Error("No token found for user");
 
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${token}`;
+    const verificationUrl = `${config.clientUrl}/verify-email/${token}`;
     
     console.log(`🔗 [DEBUG] Sending Link: ${verificationUrl}`);
 
