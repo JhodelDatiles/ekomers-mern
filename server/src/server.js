@@ -29,15 +29,6 @@ const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 const __dirname = path.resolve();
 
-if (process.env.NODE_ENV === 'production') {
-  // 1. Serve static files from the frontend 'dist' folder
-  app.use(express.static(path.join(__dirname, '/client/dist')));
-
-  // 2. The "Catch-all" - any non-api route sends the index.html
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
-  });
-}
 // 1. CORS CONFIGURATION
 const allowedOrigins = [
   'http://localhost:5173',
@@ -102,6 +93,19 @@ app.use('/api/map', mapRoutes);
 app.use('/api/', adminRoutes); // Matching your settingsAPI in frontend
 app.use('/api/admin/products', adminProductRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
+
+// --- MOVE THIS HERE (Bottom of Routes) ---
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from the frontend 'dist' folder
+  // Note: Since server.js is inside the 'server' folder, 
+  // we go UP one level to find the 'client' folder
+  app.use(express.static(path.join(__dirname, 'client', 'dist')));
+
+  // The "Catch-all" - any non-api route sends the index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'client', 'dist', 'index.html'));
+  });
+}
 
 // 6. 404 HANDLER
 app.use((req, res) => {
