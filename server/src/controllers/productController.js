@@ -14,7 +14,8 @@ export const getProducts = async (req, res) => {
       limit = 12
     } = req.query;
 
-    let query = { isActive: true };
+    // let query = { isActive: true };
+    let query = {};
 
     if (search) {
       query.$text = { $search: search };
