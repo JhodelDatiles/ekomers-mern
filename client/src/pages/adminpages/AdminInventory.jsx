@@ -119,25 +119,49 @@ const AdminProducts = () => {
     }
   };
 
-  const handleFormSubmit = async (formData) => {
-    setLoading(true);
-    try {
-      if (selectedProduct) {
-        await adminProductAPI.updateProduct(selectedProduct._id, formData);
-        toast.success("Product updated");
-      } else {
-        await adminProductAPI.createProduct(formData);
-        toast.success("Product created");
-      }
-      setIsModalOpen(false);
-      setSelectedProduct(null);
-      fetchData();
-    } catch (err) { 
-      toast.error(err.response?.data?.message || "Operation failed"); 
-      setLoading(false);
-    }
-  };
+  // const handleFormSubmit = async (formData) => {
+  //   setLoading(true);
+  //   try {
+  //     if (selectedProduct) {
+  //       await adminProductAPI.updateProduct(selectedProduct._id, formData);
+  //       toast.success("Product updated");
+  //     } else {
+  //       await adminProductAPI.createProduct(formData);
+  //       toast.success("Product created");
+  //     }
+  //     setIsModalOpen(false);
+  //     setSelectedProduct(null);
+  //     fetchData();
+  //   } catch (err) { 
+  //     toast.error(err.response?.data?.message || "Operation failed"); 
+  //     setLoading(false);
+  //   }
+  // };
 
+  const handleFormSubmit = async (formData) => {
+  setLoading(true);
+  try {
+    // THE FIX: Ensure backend receives 'basePrice'
+    const dataToSubmit = {
+      ...formData,
+      basePrice: formData.price // Mapping the form's 'price' to 'basePrice'
+    };
+
+    if (selectedProduct) {
+      await adminProductAPI.updateProduct(selectedProduct._id, dataToSubmit);
+      toast.success("Product updated");
+    } else {
+      await adminProductAPI.createProduct(dataToSubmit);
+      toast.success("Product created");
+    }
+    setIsModalOpen(false);
+    setSelectedProduct(null);
+    fetchData();
+  } catch (err) { 
+    toast.error(err.response?.data?.message || "Operation failed"); 
+    setLoading(false);
+  }
+};
   return (
     <div className="h-[calc(100vh-180px)] overflow-y-auto no-scrollbar relative pr-2">
       <div className="sticky top-0 z-40 bg-base-100 pb-6 pt-2">
