@@ -29,6 +29,7 @@ const Navbar = () => {
   const isAdmin = user?.role === 'admin';
   const uniqueCartCount = cart?.items?.length || 0;
 
+  // Integrated Dashboard Links
   const adminLinks = [
     { name: "Overview", path: "/admin", icon: <LayoutDashboard size={14} /> },
     { name: "Inventory", path: "/admin/products", icon: <Boxes size={14} /> },
@@ -80,9 +81,9 @@ const Navbar = () => {
       <div className="navbar-start">
         <Link to="/" className="flex items-center gap-2 group">
           {storeSettings.logo?.url ? (
-            <img src={storeSettings.logo.url} alt="Logo" className="w-8 h-8 object-contain transition-transform duration-200 group-hover:scale-110" />
+            <img src={storeSettings.logo.url} alt="Logo" className="w-8 h-8 object-contain transition-transform group-hover:scale-110" />
           ) : (
-            <div className="bg-primary p-2 rounded-lg shadow-lg transition-transform duration-200 group-hover:rotate-12">
+            <div className="bg-primary p-2 rounded-lg shadow-lg transition-transform group-hover:rotate-12">
               <Store className="w-5 h-5 text-primary-content" />
             </div>
           )}
@@ -104,11 +105,23 @@ const Navbar = () => {
       </div>
 
       <div className="navbar-end gap-1 md:gap-2">
+        {user && (
+          <div className="hidden md:flex items-center gap-1 mr-2 bg-base-200/50 p-1 rounded-xl border border-base-300">
+            <Link to="/" className="btn btn-ghost btn-xs h-8 px-3 gap-2 font-black uppercase italic text-[9px] tracking-[0.15em] hover:bg-base-100 rounded-lg transition-all">
+              <Home size={13} /> Storefront
+            </Link>
+            <Link 
+              to={isAdmin ? "/admin" : "/dashboard"} 
+              className="btn btn-primary btn-xs h-8 px-3 gap-2 font-black uppercase italic text-[9px] tracking-[0.15em] rounded-lg shadow-lg shadow-primary/20 transition-all"
+            >
+              {isAdmin ? <><ShieldCheck size={13} /> Admin Panel</> : <><Layout size={13} /> Dashboard</>}
+            </Link>
+          </div>
+        )}
 
         {!isAdmin && user && (
           <div className="dropdown dropdown-hover dropdown-end">
-            <div tabIndex={0} role="button"
-              className="btn btn-ghost btn-circle btn-sm relative transition-colors duration-200 hover:bg-base-200 hover:text-primary">
+            <div tabIndex={0} role="button" className="btn btn-ghost btn-circle btn-sm relative transition-all hover:bg-primary/10">
               <ShoppingBag size={20} />
               {uniqueCartCount > 0 && (
                 <span className="badge badge-primary badge-xs absolute -top-1 -right-1 font-black shadow-md border-none animate-pulse">
@@ -116,101 +129,148 @@ const Navbar = () => {
                 </span>
               )}
             </div>
+            <div tabIndex={0} className="dropdown-content z-[60] pt-2">
+              <div className="card card-compact w-80 bg-base-100 shadow-2xl border border-base-200 rounded-2xl overflow-hidden">
+                <div className="card-body p-0">
+                  <div className="p-4 border-b border-base-200 bg-base-200/30 text-center">
+                    <span className="text-[10px] font-black uppercase italic opacity-50 tracking-widest">Bag Summary ({uniqueCartCount} Items)</span>
+                  </div>
+                  {uniqueCartCount > 0 ? (
+                    <>
+                      <div className="max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-primary">
+                        {cart?.items?.map((item, idx) => (
+                          <div key={idx} className="flex gap-3 items-center p-3 border-b border-base-200/50 group hover:bg-base-200/20">
+                            <img src={item.productId?.images?.[0]?.url || "/placeholder.png"} alt="" className="w-10 h-10 object-cover rounded bg-base-200" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-black uppercase italic truncate">{item.productId?.name}</p>
+                              <p className="text-[9px] opacity-60 font-bold uppercase">{item.size} • Qty: {item.quantity}</p>
+                            </div>
+                            <button onClick={() => removeFromCart(item._id)} className="btn btn-ghost btn-xs btn-circle text-error opacity-0 group-hover:opacity-100 transition-opacity">
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-3">
+                        <Link to="/dashboard/cart" className="btn btn-primary btn-sm w-full rounded-xl font-black uppercase italic shadow-md">Checkout Now</Link>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="py-10 text-center opacity-30">
+                        <ShoppingBasket size={24} className="mx-auto mb-2"/>
+                        <p className="text-[10px] font-black uppercase italic">Bag is Empty</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
         <div className="dropdown dropdown-hover dropdown-end">
-          <label tabIndex={0}
-            className="btn btn-ghost btn-circle btn-sm transition-colors duration-200 hover:bg-base-200 hover:text-primary">
-            <Palette size={18} />
-          </label>
+          <label tabIndex={0} className="btn btn-ghost btn-circle btn-sm hover:text-primary"><Palette size={18} /></label>
+          <div tabIndex={0} className="dropdown-content z-[60] pt-2">
+            <ul className="menu p-2 shadow-2xl bg-base-100 rounded-box w-48 border border-base-200">
+              {themes.map((t) => (
+                <li key={t}>
+                  <button onClick={() => setTheme(t)} className={`capitalize flex justify-between ${theme === t ? "bg-primary/10 text-primary font-bold" : ""}`}>
+                    {t} {theme === t && <Check size={14} />}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <div key={user?._id || 'guest'} className="flex items-center">
           {user ? (
             <div className="dropdown dropdown-hover dropdown-end">
-              <label
-                tabIndex={0}
-                className="btn btn-ghost btn-circle avatar border-2 border-primary/20 hover:border-primary hover:bg-base-200 transition-colors duration-200 ml-1 overflow-hidden p-0">
+              <label tabIndex={0} className="btn btn-ghost btn-circle avatar border-2 border-primary/20 hover:border-primary ml-1 transition-all overflow-hidden p-0">
                 <div className="w-8 md:w-9 rounded-full overflow-hidden bg-base-300 flex items-center justify-center">
                   <img 
                     src={user.profilePic?.url || `https://ui-avatars.com/api/?name=${user.username}&background=641ae6&color=fff&bold=true`} 
                     alt={user.username} 
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover" 
+                    onError={(e) => {
+                      e.target.src = `https://ui-avatars.com/api/?name=${user.username}&background=641ae6&color=fff`;
+                    }}
                   />
                 </div>
               </label>
-
               <div tabIndex={0} className="dropdown-content z-[60] pt-2">
                 <ul className="menu p-3 shadow-2xl bg-base-100 rounded-2xl w-64 border border-base-200">
+                  <div className="px-4 py-3 border-b border-base-200 mb-2 bg-base-200/50 rounded-xl text-center">
+                    <div className="flex items-center justify-center gap-1 mb-0.5">
+                      {isAdmin && <ShieldCheck size={10} className="text-primary" />}
+                      <p className="text-[9px] font-black uppercase opacity-40 tracking-widest">{user.role}</p>
+                    </div>
+                    <p className="text-sm font-black uppercase italic truncate">{user.username}</p>
+                  </div>
 
+                  {/* Dashboard / Storefront Links for Mobile */}
+                  <li className="md:hidden">
+                      <Link to="/" className="font-bold text-[11px] uppercase"><Home size={14}/> Storefront</Link>
+                  </li>
+
+                  {/* Sidebar Features Ported to Navbar Dropdown */}
                   {(isAdmin ? adminLinks : userLinks).map((link) => (
                     <li key={link.path}>
-                      <Link
-                        to={link.path}
-                        className={`py-2 px-3 text-[11px] font-bold uppercase tracking-tight rounded-lg flex items-center gap-3 group transition-colors duration-200 hover:bg-base-200 hover:text-primary ${location.pathname === link.path ? "text-primary bg-primary/5" : ""}`}
-                      >
-                        <span className="opacity-50 group-hover:opacity-100 group-hover:text-primary transition-all">
-                          {link.icon}
-                        </span>
+                      <Link to={link.path} className={`py-2 px-3 text-[11px] font-bold uppercase tracking-tight hover:bg-base-200 rounded-lg flex items-center gap-3 group ${location.pathname === link.path ? "text-primary bg-primary/5" : ""}`}>
+                        <span className="opacity-50 group-hover:opacity-100 group-hover:text-primary transition-all">{link.icon}</span> 
                         {link.name}
                       </Link>
                     </li>
                   ))}
 
+                  {/* Ported Settings Accordion */}
                   <li className="mt-1">
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsNavSettingsOpen(!isNavSettingsOpen);
+                    <button 
+                      onClick={(e) => { 
+                        e.preventDefault(); 
+                        e.stopPropagation(); 
+                        setIsNavSettingsOpen(!isNavSettingsOpen); 
                       }}
-                      className={`flex items-center justify-between py-2 px-3 text-[11px] font-bold uppercase tracking-tight rounded-lg transition-colors duration-200 hover:bg-base-200 hover:text-primary ${location.pathname.includes("settings") ? "bg-base-200" : ""}`}
+                      className={`flex items-center justify-between py-2 px-3 text-[11px] font-bold uppercase tracking-tight rounded-lg hover:bg-base-200 ${location.pathname.includes("settings") ? "bg-base-200" : ""}`}
                     >
                       <div className="flex items-center gap-3">
-                        <Settings size={14} />
+                        <Settings size={14} className={isNavSettingsOpen ? "animate-spin-slow text-primary" : "opacity-50"} />
                         Settings
                       </div>
                       <ChevronDown size={12} className={`transition-transform duration-300 ${isNavSettingsOpen ? "rotate-180" : ""}`} />
                     </button>
-
-                    <div className={`overflow-hidden transition-all duration-300 ${isNavSettingsOpen ? "max-h-40 opacity-100 mb-2" : "max-h-0 opacity-0"}`}>
-                      {settingsSubLinks
-                        .filter(sub => !(isAdmin && sub.hideForAdmin))
-                        .map((sub) => (
-                          <Link
-                            key={sub.path}
-                            to={sub.path}
-                            className={`flex items-center gap-3 ml-6 py-2.5 text-[10px] font-bold uppercase rounded-lg transition-colors duration-200 ${location.pathname === sub.path ? "text-primary bg-primary/5" : "opacity-60 hover:opacity-100 hover:bg-base-200 hover:text-primary"}`}
-                          >
-                            {sub.icon} {sub.name}
-                          </Link>
-                        ))}
-                    </div>
+                      <div className={`overflow-hidden transition-all duration-300 ${isNavSettingsOpen ? "max-h-40 opacity-100 mb-2" : "max-h-0 opacity-0"}`}>
+                        <div className="flex flex-col gap-1 pl-6">
+                          {settingsSubLinks
+                            .filter(sub => !(isAdmin && sub.hideForAdmin))
+                            .map((sub) => (
+                              <Link 
+                                key={sub.path} 
+                                to={sub.path} 
+                                className={`flex items-center gap-3 py-2 text-[10px] font-bold uppercase rounded-lg ${location.pathname === sub.path ? "text-primary bg-primary/5" : "opacity-60 hover:opacity-100"}`}
+                              >
+                                {sub.icon} {sub.name}
+                              </Link>
+                            ))}
+                        </div>
+                      </div>
                   </li>
 
                   <div className="divider my-1 opacity-50"></div>
-
                   <li>
-                    <button
-                      onClick={handleLogout}
-                      className="text-error font-black uppercase text-[10px] py-3 tracking-widest hover:bg-error/10 transition-colors duration-200 flex justify-center border border-dashed border-error/20 rounded-xl mt-1"
-                    >
+                    <button onClick={handleLogout} className="text-error font-black uppercase text-[10px] py-3 tracking-widest hover:bg-error/10 flex justify-center border border-dashed border-error/20 rounded-xl mt-1">
                       Logout Session
                     </button>
                   </li>
-
                 </ul>
               </div>
             </div>
           ) : (
             <div className="flex gap-1 ml-2">
-              <Link to="/login" className="btn btn-ghost btn-sm px-4 font-black uppercase text-[10px] transition-colors duration-200 hover:bg-base-200 hover:text-primary">Login</Link>
+              <Link to="/login" className="btn btn-ghost btn-sm px-4 font-black uppercase text-[10px]">Login</Link>
               <Link to="/register" className="btn btn-primary btn-sm px-4 font-black uppercase text-[10px] shadow-lg shadow-primary/20">Join</Link>
             </div>
           )}
         </div>
-
       </div>
     </nav>
   );
