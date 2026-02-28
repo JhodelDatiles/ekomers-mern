@@ -211,7 +211,7 @@ export const handlePayMongoWebhook = async (req, res) => {
   const timestamp = t.split('=')[1];
   const paymongoHash = te ? te.split('=')[1] : li.split('=')[1];
   const baseString = timestamp + "." + payload;
-  const calculatedHash = crypto.createHmac('sha256', webhookSecret).update(baseString).digest('hex');
+  // const calculatedHash = crypto.createHmac('sha256', webhookSecret).update(baseString).digest('hex');
 
   const calculatedHash = crypto
     .createHmac('sha256', webhookSecret)
