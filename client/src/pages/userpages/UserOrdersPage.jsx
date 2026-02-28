@@ -27,7 +27,8 @@ const UserOrdersPage = () => {
       const status = order.status?.toLowerCase().trim();
       switch (activeTab) {
         case "To Ship": 
-          return ["pending", "order in progress", "processing", "cancellation requested"].includes(status);
+          // FIX: Added 'paid' and 'awaiting payment' to ensure new orders show up here
+          return ["pending", "paid", "awaiting payment", "order in progress", "processing", "cancellation requested"].includes(status);
         case "To Receive": 
           return ["shipped/in transit", "out for delivery", "shipped"].includes(status);
         case "Completed": 
@@ -71,7 +72,8 @@ const UserOrdersPage = () => {
   const getStatusConfig = (status) => {
     const s = status?.toLowerCase().trim();
     if (s === 'cancellation requested') return { color: 'text-warning', icon: <Clock size={16} className="animate-pulse" />, bg: 'bg-warning/10' };
-    if (s === 'pending') return { color: 'text-warning', icon: <Clock size={16} />, bg: 'bg-warning/10' };
+    // FIX: Added 'paid' here so it shows the yellow clock icon instead of gray
+    if (['pending', 'paid', 'awaiting payment'].includes(s)) return { color: 'text-warning', icon: <Clock size={16} />, bg: 'bg-warning/10' };
     if (['order in progress', 'processing'].includes(s)) return { color: 'text-secondary', icon: <Loader2 size={16} className="animate-spin" />, bg: 'bg-secondary/10' };
     if (['shipped/in transit', 'out for delivery', 'shipped'].includes(s)) return { color: 'text-primary', icon: <Truck size={16} />, bg: 'bg-primary/10' };
     if (['delivered', 'completed'].includes(s)) return { color: 'text-success', icon: <CheckCircle size={16} />, bg: 'bg-success/10' };
@@ -88,10 +90,8 @@ const UserOrdersPage = () => {
   }
 
   return (
-    /* FIXED VIEWPORT WRAPPER */
     <div className="flex flex-col h-[calc(100vh-120px)] max-w-5xl mx-auto px-4 overflow-hidden">
       
-      {/* FIXED HEADER & TABS */}
       <header className="pt-6 shrink-0 bg-base-100 z-20">
         <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-4">
           Orders <span className="text-primary">Manifest</span>
@@ -111,7 +111,6 @@ const UserOrdersPage = () => {
         </div>
       </header>
 
-      {/* SCROLLABLE LIST AREA */}
       <main className="flex-1 overflow-y-auto pr-2 custom-scrollbar pt-4 pb-10 space-y-4 no-scrollbar">
         {filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 opacity-20 grayscale">
@@ -171,7 +170,7 @@ const UserOrdersPage = () => {
 
                     <div className="bg-base-300/50 p-6 rounded-[24px] flex flex-col gap-4 border border-base-content/5">
                       <div className="flex flex-col gap-3">
-                        {["pending", "order in progress", "processing"].includes(statusLower) && (
+                        {["pending", "paid", "awaiting payment", "order in progress", "processing"].includes(statusLower) && (
                           <button onClick={() => setModalConfig({ isOpen: true, mode: "cancel", order })} className="btn btn-error btn-outline rounded-xl font-black uppercase italic text-xs h-14 border-2">
                             <XCircle size={16} className="mr-2" /> Request Cancellation
                           </button>
