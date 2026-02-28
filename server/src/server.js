@@ -106,7 +106,15 @@ if (process.env.NODE_ENV === 'production') {
     etag: true,
     lastModified: true,
     setHeaders: (res, filePath) => {
-      // Prevent sending pre-compressed files without proper headers
+      // Never cache HTML — always fetch fresh on new deploy
+      if (filePath.endsWith('.html')) {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+      // Cache JS/CSS/images for 1 year (Vite adds unique hash to filenames)
+      else {
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      // Handle pre-compressed files
       if (filePath.endsWith('.gz')) {
         res.set('Content-Encoding', 'gzip');
       }
