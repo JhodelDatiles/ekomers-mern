@@ -5,6 +5,7 @@ import {
   ShieldCheck, Edit3, X, CheckCircle2, QrCode
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useCart } from "../../context/CartContext";
 import { orderAPI, userAPI, paymentAPI } from "../../services/api"; 
 import toast from "react-hot-toast";
 import CheckoutSkeleton from "../../components/skeletons/CheckoutSkeleton";
@@ -13,6 +14,7 @@ const Checkout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, setUser, loading: authLoading } = useAuth();
+  const { removeFromCart, fetchCart } = useCart(); // ← get cart controls
 
   const checkoutItems = useMemo(() => location.state?.items || [], [location.state?.items]);
   const checkoutTotal = location.state?.total || 0;
@@ -24,7 +26,6 @@ const Checkout = () => {
   const [qrCode, setQrCode] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
   const [pollingId, setPollingId] = useState(null);
-  const [debugInfo, setDebugInfo] = useState(null); // ← shows raw next_action on screen
 
   const autoSyncNode = useCallback(async () => {
     if (isSyncing) return;
@@ -47,6 +48,17 @@ const Checkout = () => {
           clearInterval(interval);
           setPollingId(null);
           setShowQrModal(false);
+
+          // ✅ Remove purchased items from cart UI
+          try {
+            for (const item of checkoutItems) {
+              await removeFromCart(item._id);
+            }
+          } catch (err) {
+            // If individual removal fails, refresh the whole cart
+            if (fetchCart) await fetchCart();
+          }
+
           toast.success("Payment Received!");
           navigate('/payment-success');
         }
@@ -74,12 +86,8 @@ const Checkout = () => {
         }
       });
 
-      console.log("🖼️ Full API result:", JSON.stringify(result, null, 2));
-      setDebugInfo(result.debugNextAction); // store for on-screen display
-
       if (!result.qrImage) {
-        toast.error(`No QR. Status: ${result.status}`, { duration: 5000 });
-        setShowQrModal(true); // open modal to show debug info
+        toast.error(`No QR returned. Status: ${result.status}`, { duration: 5000 });
         return;
       }
 
@@ -285,33 +293,26 @@ const Checkout = () => {
             <h2 className="text-2xl font-black uppercase italic text-white mb-2">Scan to Pay</h2>
             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-6">GCash • Maya • ShopeePay</p>
             
-            <div className="bg-white p-4 rounded-3xl mb-6 inline-block w-full">
+            <div className="bg-white p-4 rounded-3xl mb-6 inline-block">
               {qrCode ? (
                 <img src={qrCode} alt="Payment QR" className="w-64 h-64 mx-auto" />
               ) : (
-                /* DEBUG PANEL — shows raw next_action so we can find the correct image path */
-                <div className="w-full min-h-32 flex flex-col items-start justify-start p-2 text-left">
-                  <p className="text-red-500 text-[9px] font-bold mb-2 uppercase">Debug: next_action structure</p>
-                  <pre className="text-[8px] text-gray-700 overflow-auto max-h-48 w-full break-all whitespace-pre-wrap">
-                    {debugInfo ? JSON.stringify(debugInfo, null, 2) : "null — no next_action returned"}
-                  </pre>
+                <div className="w-64 h-64 flex items-center justify-center">
+                  <Loader2 size={40} className="animate-spin text-gray-400" />
                 </div>
               )}
             </div>
 
             <div className="space-y-4">
-              {qrCode && (
-                <div className="flex items-center justify-center gap-2 text-primary animate-pulse">
-                  <Loader2 size={16} className="animate-spin" />
-                  <span className="text-[10px] font-black uppercase italic">Awaiting Confirmation...</span>
-                </div>
-              )}
+              <div className="flex items-center justify-center gap-2 text-primary animate-pulse">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-[10px] font-black uppercase italic">Awaiting Confirmation...</span>
+              </div>
               <button 
                 onClick={() => {
                   if (pollingId) clearInterval(pollingId);
                   setPollingId(null);
                   setShowQrModal(false);
-                  setDebugInfo(null);
                   setQrCode(null);
                 }}
                 className="text-[10px] font-black uppercase text-white/20 hover:text-error transition-all"

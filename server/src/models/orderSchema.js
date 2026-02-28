@@ -8,6 +8,7 @@ const orderSchema = new mongoose.Schema(
       default: () => `ORD-${Math.floor(100000 + Math.random() * 900000)}` 
     },
     checkoutSessionId: { type: String },
+    paymentIntentId: { type: String }, // ← QR PH orders use this
     userId: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: 'User', 
