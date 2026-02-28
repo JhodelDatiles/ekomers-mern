@@ -228,10 +228,6 @@ export const createQrPhPayment = async (req, res) => {
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
 
-    console.log("🔑 Using key:", secretKey?.substring(0, 10));
-    console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
-    console.log("💰 Amount:", amount, "→ centavos:", Math.round(amount * 100));
-
     // Step 1: Create Payment Intent
     const intentRes = await axios.post('https://api.paymongo.com/v1/payment_intents', {
       data: {
@@ -249,17 +245,15 @@ export const createQrPhPayment = async (req, res) => {
       }
     }, { headers: { authorization: authHeader, 'Content-Type': 'application/json' } });
 
-    console.log("✅ Step 1 - Intent created:", intentRes.data.data.id);
-
     const paymentIntentId = intentRes.data.data.id;
     const clientKey = intentRes.data.data.attributes.client_key;
 
     // Step 2: Create QR PH Payment Method
     const methodRes = await axios.post('https://api.paymongo.com/v1/payment_methods', {
-      data: { attributes: { type: 'qrph' } }
+      data: {
+        attributes: { type: 'qrph' }
+      }
     }, { headers: { authorization: authHeader, 'Content-Type': 'application/json' } });
-
-    console.log("✅ Step 2 - Method created:", methodRes.data.data.id);
 
     const paymentMethodId = methodRes.data.data.id;
 
@@ -280,35 +274,22 @@ export const createQrPhPayment = async (req, res) => {
     const attrs = attachRes.data.data.attributes;
     const nextAction = attrs.next_action;
 
-    // Log BEFORE res.json so it always appears
-    console.log("✅ Step 3 - Status:", attrs.status);
-    console.log("🔍 next_action FULL:", JSON.stringify(nextAction, null, 2));
-
+    // PayMongo returns QR image at next_action.code.image_url (base64 PNG)
     const qrImage = nextAction?.code?.image_url
-      || nextAction?.image_url
-      || nextAction?.data?.qr_image
-      || nextAction?.qr_image
-      || nextAction?.data?.qr_code
-      || nextAction?.qr_code;
+      || nextAction?.data?.image_url
+      || nextAction?.image_url;
 
-    console.log("🖼️ Resolved qrImage:", qrImage);
+    console.log(`✅ Step 3 - Status: ${attrs.status}`);
 
-    // Send debugNextAction so frontend can display it on screen
     res.status(200).json({
       paymentIntentId,
       qrImage,
-      status: attrs.status,
-      debugNextAction: nextAction  // ← frontend will show this in modal
+      status: attrs.status
     });
 
   } catch (error) {
-    console.error('❌ QR PH Error status:', error.response?.status);
-    console.error('❌ QR PH Error data:', JSON.stringify(error.response?.data, null, 2));
-    console.error('❌ QR PH Error message:', error.message);
-    res.status(500).json({ 
-      message: 'QR PH payment failed',
-      error: error.response?.data
-    });
+    console.error('❌ QR PH Error:', error.response?.data || error.message);
+    res.status(500).json({ message: 'QR PH payment failed' });
   }
 };
 
