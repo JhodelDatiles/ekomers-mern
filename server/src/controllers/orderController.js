@@ -187,16 +187,17 @@ export const initiatePayMongoCheckout = async (req, res) => {
 // };
 
 // ... Rest of the functions (getUserOrders, getOrderById, etc.) stay the same
-// export const getUserOrders = async (req, res) => {
-//   try {
-//     const orders = await Order.find({ userId: req.user.id })
-//       .sort({ createdAt: -1 })
-//       .populate('items.productId', 'name images');
-//     res.status(200).json({ orders });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error fetching orders" });
-//   }
-// };
+
+export const getUserOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({ userId: req.user.id })
+      .sort({ createdAt: -1 })
+      .populate('items.productId', 'name images');
+    res.status(200).json({ orders });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching orders" });
+  }
+};
 
 export const handlePayMongoWebhook = async (req, res) => {
   console.log("🚀 Webhook hit! Checking signature...");
