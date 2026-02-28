@@ -66,8 +66,10 @@ app.use(cors({
 // 2. BODY PARSING & WEBHOOK RAW BODY CAPTURE
 app.use(express.json({
   verify: (req, res, buf) => {
+    // Check if the URL matches your webhook path
     if (req.originalUrl.includes('/api/orders/webhook')) {
-      req.rawBody = buf.toString(); 
+      // DO NOT use .toString() here yet. Store the raw buffer.
+      req.rawBody = buf; 
     }
   }
 }));
