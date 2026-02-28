@@ -31,7 +31,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: { 
       type: String, 
-      enum: ['gcash', 'paymaya', 'card', 'grab_pay', 'billease'], 
+      enum: ['gcash', 'paymaya', 'card', 'grab_pay', 'billease', 'qrph', 'paymongo'], 
       required: true 
     },
     paymentStatus: { 
