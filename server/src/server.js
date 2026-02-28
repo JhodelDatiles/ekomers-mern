@@ -92,15 +92,27 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/map', mapRoutes); 
 
 // 5. ADMIN SPECIFIC ROUTES (Structured for clarity)
-app.use('/api/', adminRoutes); // Matching your settingsAPI in frontend
 app.use('/api/admin/products', adminProductRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
+// ✅ adminRoutes LAST - it handles /api/settings and /api/admin/users
+// Must be after all other specific routes to avoid conflicts
+app.use('/api/', adminRoutes); // Matching your settingsAPI in frontend
 
 // In production block:
 if (process.env.NODE_ENV === 'production') {
   const clientDistPath = path.join(__dirname, '..', '..', 'client', 'dist');
   
-  app.use(express.static(clientDistPath));
+  app.use(express.static(clientDistPath, {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      // Prevent sending pre-compressed files without proper headers
+      if (filePath.endsWith('.gz')) {
+        res.set('Content-Encoding', 'gzip');
+      }
+    }
+  }));
+
   app.get('/*splat', (req, res) => {
     res.sendFile(path.join(clientDistPath, 'index.html'));
   });
