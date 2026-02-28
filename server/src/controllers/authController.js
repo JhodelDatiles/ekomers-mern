@@ -58,7 +58,7 @@ export const register = async (req, res) => {
       email, 
       password, 
       username, 
-      isVerified: true  // ← auto-verify on register
+      isVerified: true  // ← auto-verify user after registtration for now
       // verificationToken: token 
     });
 
@@ -177,7 +177,7 @@ export const login = async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: "Invalid credentials!" });
     }
-    // 🛑 CHECK VERIFICATION STATUS
+    // 🛑 CHECK VERIFICATION STATUS Uncomment this once you have a domain name
     // if (!user.isVerified) {
     //   return res.status(403).json({ 
     //     message: "Please verify your email address before logging in." 

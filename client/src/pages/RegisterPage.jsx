@@ -4,13 +4,12 @@ import { User, Mail, Lock, CheckCircle, UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
 import { authAPI } from "../services/api.js";
 import Footer from "../components/Footer.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
+// import { useAuth } from "../context/AuthContext.jsx";
 
 const Register = () => {
   const navigate = useNavigate();
   // const { login } = useAuth();
   const [isSubmitted, setIsSubmitted] = useState(false); // New State
-
 
   // 1. Form State
   const [formData, setFormData] = useState({
@@ -44,7 +43,10 @@ const Register = () => {
   };
 
   const handleConfirmBlur = () => {
-    if (formData.confirmPassword && formData.password !== formData.confirmPassword) {
+    if (
+      formData.confirmPassword &&
+      formData.password !== formData.confirmPassword
+    ) {
       setConfirmError("Passwords do not match");
     }
   };
@@ -70,18 +72,19 @@ const Register = () => {
 
     try {
       const response = await authAPI.register(formData);
-      
-      // SUCCESS STATE
-      setIsSubmitted(true); 
-      toast.success("Verification email sent!");
-// Inside your Register handleSubmit catch block
-} catch (error) {
-  if (error.response?.status === 409) {
-    toast.error("Email already exists. Try logging in!");
-  } else {
-    toast.error(error.response?.data?.message || "Registration failed.");
-  }
 
+      // SUCCESS STATE
+      setIsSubmitted(true);
+      toast.success("No  email verification yet! but you can login now!");
+      //uncomment this when you already have your own domain
+      // toast.success("Verification email sent!");
+      // Inside your Register handleSubmit catch block
+    } catch (error) {
+      if (error.response?.status === 409) {
+        toast.error("Email already exists. Try logging in!");
+      } else {
+        toast.error(error.response?.data?.message || "Registration failed.");
+      }
     } finally {
       setLoading(false);
     }
@@ -94,11 +97,17 @@ const Register = () => {
           <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <Mail className="w-10 h-10 text-primary animate-bounce" />
           </div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter">Check Your Inbox</h2>
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter">
+            Check Your Inbox
+          </h2>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mt-2 mb-6">
-            We sent a verification link to <span className="text-primary">{formData.email}</span>
+            We sent a verification link to{" "}
+            <span className="text-primary">{formData.email}</span>
           </p>
-          <button onClick={() => navigate('/login')} className="btn btn-primary w-full rounded-2xl font-black uppercase italic">
+          <button
+            onClick={() => navigate("/login")}
+            className="btn btn-primary w-full rounded-2xl font-black uppercase italic"
+          >
             Go to Login
           </button>
         </div>
@@ -107,56 +116,68 @@ const Register = () => {
   }
 
   return (
- <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen">
       <main className="flex-grow relative z-10 overflow-hidden bg-base-200">
         <div className="min-h-[calc(100vh-80px)] flex justify-center md:justify-end md:pr-20 items-center">
           <div className="w-full max-w-md bg-base-100 shadow-xl relative z-20 rounded-3xl overflow-hidden">
             <div className="card-body justify-center py-8">
               <div className="flex flex-col items-center gap-1 mb-6">
-                <h2 className="card-title text-3xl font-black uppercase italic tracking-tighter text-base-content">Sign Up</h2>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 text-base-content">Create your identity</p>
+                <h2 className="card-title text-3xl font-black uppercase italic tracking-tighter text-base-content">
+                  Sign Up
+                </h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 text-base-content">
+                  Create your identity
+                </p>
               </div>
-              
-              <form onSubmit={handleSubmit} className="space-y-4">
-{/* USERNAME */}
-<div className="form-control">
-  <div className="flex justify-between items-end mb-1">
-    <label className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 text-base-content" htmlFor="username">
-      <User className="w-4 h-4 text-primary" /> Username
-    </label>
-    <span className={`text-[10px] font-bold transition-all duration-300 ${
-      formData.username.length >= 20 ? 'text-error animate-pulse' : 'opacity-30 text-base-content'
-    }`}>
-      {formData.username.length} / 20
-    </span>
-  </div>
-  
-  <div className="relative">
-    <input
-      id="username"
-      type="text"
-      name="username"
-      maxLength={20} // Physical limit
-      placeholder="Choose a username"
-      className={`input input-bordered w-full bg-base-200 font-bold text-base-content transition-all rounded-2xl
-        ${formData.username.length >= 20 
-          ? 'border-error focus:border-error ring-2 ring-error/10' 
-          : 'border-base-content/10 focus:border-primary'
-        }`}
-      value={formData.username}
-      onChange={handleChange}
-      required
-    />
-  </div>
 
-  <div className="h-4 mt-1"> 
-    {formData.username.length >= 20 && (
-      <p className="text-[10px] font-black text-error animate-in slide-in-from-top-1 duration-300 uppercase italic tracking-tight text-right">
-        Once Exceeded 20 characters
-      </p>
-    )}
-  </div>
-</div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* USERNAME */}
+                <div className="form-control">
+                  <div className="flex justify-between items-end mb-1">
+                    <label
+                      className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 text-base-content"
+                      htmlFor="username"
+                    >
+                      <User className="w-4 h-4 text-primary" /> Username
+                    </label>
+                    <span
+                      className={`text-[10px] font-bold transition-all duration-300 ${
+                        formData.username.length >= 20
+                          ? "text-error animate-pulse"
+                          : "opacity-30 text-base-content"
+                      }`}
+                    >
+                      {formData.username.length} / 20
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      id="username"
+                      type="text"
+                      name="username"
+                      maxLength={20} // Physical limit
+                      placeholder="Choose a username"
+                      className={`input input-bordered w-full bg-base-200 font-bold text-base-content transition-all rounded-2xl
+        ${
+          formData.username.length >= 20
+            ? "border-error focus:border-error ring-2 ring-error/10"
+            : "border-base-content/10 focus:border-primary"
+        }`}
+                      value={formData.username}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+
+                  <div className="h-4 mt-1">
+                    {formData.username.length >= 20 && (
+                      <p className="text-[10px] font-black text-error animate-in slide-in-from-top-1 duration-300 uppercase italic tracking-tight text-right">
+                        Once Exceeded 20 characters
+                      </p>
+                    )}
+                  </div>
+                </div>
 
                 {/* EMAIL */}
                 <div className="form-control">
@@ -189,14 +210,16 @@ const Register = () => {
                     type="password"
                     name="password"
                     placeholder="Enter your password"
-                    className={`input input-bordered w-full bg-base-200 font-bold text-base-content focus:border-primary transition-all rounded-2xl ${passwordError ? 'border-error' : 'border-base-content/10'}`}
+                    className={`input input-bordered w-full bg-base-200 font-bold text-base-content focus:border-primary transition-all rounded-2xl ${passwordError ? "border-error" : "border-base-content/10"}`}
                     value={formData.password}
                     onChange={handleChange}
                     onBlur={handlePasswordBlur}
                     required
                   />
                   {passwordError && (
-                    <p className="text-error text-[10px] font-black uppercase italic mt-1 animate-pulse">{passwordError}</p>
+                    <p className="text-error text-[10px] font-black uppercase italic mt-1 animate-pulse">
+                      {passwordError}
+                    </p>
                   )}
                 </div>
 
@@ -204,7 +227,8 @@ const Register = () => {
                 <div className="form-control">
                   <label className="label" htmlFor="confirmPassword">
                     <span className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 text-base-content">
-                      <CheckCircle className="w-4 h-4 text-primary" /> Confirm Password
+                      <CheckCircle className="w-4 h-4 text-primary" /> Confirm
+                      Password
                     </span>
                   </label>
                   <input
@@ -212,24 +236,43 @@ const Register = () => {
                     type="password"
                     name="confirmPassword"
                     placeholder="Re-enter password"
-                    className={`input input-bordered w-full bg-base-200 font-bold text-base-content focus:border-primary transition-all rounded-2xl ${confirmError ? 'border-error' : 'border-base-content/10'}`}
+                    className={`input input-bordered w-full bg-base-200 font-bold text-base-content focus:border-primary transition-all rounded-2xl ${confirmError ? "border-error" : "border-base-content/10"}`}
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     onBlur={handleConfirmBlur}
                     required
                   />
                   {confirmError && (
-                    <p className="text-error text-[10px] font-black uppercase italic mt-1 animate-pulse">{confirmError}</p>
+                    <p className="text-error text-[10px] font-black uppercase italic mt-1 animate-pulse">
+                      {confirmError}
+                    </p>
                   )}
                 </div>
 
-                <button type="submit" className="btn btn-primary w-full mt-4 font-black uppercase italic tracking-widest rounded-2xl shadow-lg shadow-primary/20" disabled={loading}>
-                  {loading ? <span className="loading loading-spinner"></span> : <><UserPlus className="w-4 h-4" /> Sign Up</>}
+                <button
+                  type="submit"
+                  className="btn btn-primary w-full mt-4 font-black uppercase italic tracking-widest rounded-2xl shadow-lg shadow-primary/20"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <span className="loading loading-spinner"></span>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" /> Sign Up
+                    </>
+                  )}
                 </button>
               </form>
 
-              <div className="divider text-[10px] font-black text-base-content/30 uppercase tracking-[0.3em]">OR</div>
-              <Link to="/login" className="btn btn-outline btn-block rounded-2xl font-black uppercase tracking-widest text-[10px] border-base-content/20 hover:bg-base-content hover:text-base-100">Login</Link>
+              <div className="divider text-[10px] font-black text-base-content/30 uppercase tracking-[0.3em]">
+                OR
+              </div>
+              <Link
+                to="/login"
+                className="btn btn-outline btn-block rounded-2xl font-black uppercase tracking-widest text-[10px] border-base-content/20 hover:bg-base-content hover:text-base-100"
+              >
+                Login
+              </Link>
             </div>
           </div>
         </div>
