@@ -58,7 +58,8 @@ export const register = async (req, res) => {
       email, 
       password, 
       username, 
-      verificationToken: token 
+      isVerified: true  // ← auto-verify on register
+      // verificationToken: token 
     });
 
     // 🚀 WRAP EMAIL IN A TRY-CATCH
@@ -177,11 +178,11 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials!" });
     }
     // 🛑 CHECK VERIFICATION STATUS
-    if (!user.isVerified) {
-      return res.status(403).json({ 
-        message: "Please verify your email address before logging in." 
-      });
-    }
+    // if (!user.isVerified) {
+    //   return res.status(403).json({ 
+    //     message: "Please verify your email address before logging in." 
+    //   });
+    // }
     setTokenCookies(res, user);
 
     // 🚀 NEW FEATURE: Fetch full user profile to include addresses for instant UI sync
