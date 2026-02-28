@@ -64,13 +64,18 @@ app.use(cors({
 }));
 
 // 2. BODY PARSING & WEBHOOK RAW BODY CAPTURE
+// app.use(express.json({
+//   verify: (req, res, buf) => {
+//     // Check if the URL matches your webhook path
+//     if (req.originalUrl.includes('/api/orders/webhook')) {
+//       // DO NOT use .toString() here yet. Store the raw buffer.
+//       req.rawBody = buf; 
+//     }
+//   }
+// }));
 app.use(express.json({
   verify: (req, res, buf) => {
-    // Check if the URL matches your webhook path
-    if (req.originalUrl.includes('/api/orders/webhook')) {
-      // DO NOT use .toString() here yet. Store the raw buffer.
-      req.rawBody = buf; 
-    }
+    req.rawBody = buf.toString(); // Stores the unparsed body for the webhook
   }
 }));
 app.use(express.urlencoded({ extended: true }));

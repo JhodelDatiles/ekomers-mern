@@ -33,7 +33,7 @@ export const updateOrderStatus = async (req, res) => {
         
         return Product.updateOne(
           { _id: item.productId, "sizes.size": item.size },
-          { $inc: { "sizes.$.stock": item.quantity } }
+          { $inc: { "sizes.$.stock": -item.quantity } }
         );
       });
 
