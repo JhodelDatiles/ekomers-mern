@@ -200,64 +200,90 @@ export const getUserOrders = async (req, res) => {
 };
 
 export const handlePayMongoWebhook = async (req, res) => {
-  console.log("🚀 Webhook hit! Checking signature...");
-  
-  const signature = req.headers['paymongo-signature'];
-  const webhookSecret = config.paymongoWebhooks;
-  const payload = req.rawBody; // Ensure your server.js uses express.raw() for this route
+  console.log("📩 Webhook Received: Processing...");
 
-  // 1. Signature Verification (Keep your existing logic, it's good)
-  const [t, te, li] = signature.split(',');
-  const timestamp = t.split('=')[1];
-  const paymongoHash = te ? te.split('=')[1] : li.split('=')[1];
-  const baseString = timestamp + "." + payload;
-  // const calculatedHash = crypto.createHmac('sha256', webhookSecret).update(baseString).digest('hex');
+  try {
+    const signature = req.headers['paymongo-signature'];
+    const webhookSecret = config.paymongoWebhooks;
+    const payload = req.rawBody; // Captured as Buffer in server.js
 
-  const calculatedHash = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(timestamp + '.' + payload) // Concatenate timestamp with the raw buffer
-    .digest('hex');
-
-  if (calculatedHash !== paymongoHash) {
-    console.error("❌ Invalid signature. Hashes do not match.");
-    return res.status(401).send('Invalid signature');
-  }
-
-  // 2. Extract Data Correctly
-  // PayMongo structure: req.body.data.attributes.type && req.body.data.attributes.data.attributes
-  const eventAttributes = req.body.data.attributes;
-  const type = eventAttributes.type; 
-
-  if (type === 'checkout_session.payment.paid') {
-    // This is where the fix is: reaching deeper into the attributes
-    const sessionData = eventAttributes.data.attributes; 
-    const metadata = sessionData.metadata;
-
-    if (!metadata || !metadata.userId) {
-      console.error("❌ Webhook Error: No metadata found in session");
-      return res.status(400).send("No metadata");
+    // 1. Validate existence of required data
+    if (!signature || !payload) {
+      console.error("❌ Webhook Error: Missing signature header or raw body");
+      return res.status(400).send('Missing Data');
     }
 
-    const { userId, address, contactNumber, instructions } = metadata;
+    if (!webhookSecret) {
+      console.error("❌ Config Error: PAYMONGO_WEBHOOK_SECRET is undefined. Check Render Env Vars.");
+      return res.status(500).send('Server Configuration Error');
+    }
 
-    try {
-      // 3. Fetch Cart
-      const cart = await Cart.findOne({ userId }).populate('items.productId');
-      if (!cart) {
-        console.error(`❌ No cart found for user ${userId}`);
-        return res.status(404).send("Cart not found");
+    // 2. Extract components from PayMongo signature header
+    const parts = signature.split(',');
+    const timestamp = parts.find(p => p.startsWith('t='))?.split('=')[1];
+    const testHash = parts.find(p => p.startsWith('te='))?.split('=')[1];
+    const liveHash = parts.find(p => p.startsWith('li='))?.split('=')[1];
+    const paymongoHash = liveHash || testHash;
+
+    // 3. Verify Signature
+    const baseString = `${timestamp}.${payload}`;
+    const calculatedHash = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(baseString)
+      .digest('hex');
+
+    if (calculatedHash !== paymongoHash) {
+      console.error("❌ Security: Invalid Webhook Signature Match");
+      // Logging first/last 4 chars for debugging without exposing full secret
+      console.log(`Debug: Calc[${calculatedHash.slice(0,4)}...] vs PayM[${paymongoHash.slice(0,4)}...]`);
+      return res.status(401).send('Invalid signature');
+    }
+
+    // 4. Handle successful payment
+    const eventAttr = req.body.data.attributes;
+    if (eventAttr.type === 'checkout_session.payment.paid') {
+      const session = eventAttr.data.attributes;
+      const { userId, fullName, address, contactNumber, instructions } = session.metadata;
+
+      console.log(`📦 Processing Order for User: ${userId}`);
+
+      // Check for duplicate processing
+      const existingOrder = await Order.findOne({ checkoutSessionId: session.id });
+      if (existingOrder) {
+        console.log("⚠️ Order already exists for this session.");
+        return res.status(200).json({ received: true });
       }
 
-      const orderItems = cart.items.map(item => ({
-        productId: item.productId._id,
-        name: item.productId.name,
-        quantity: item.quantity,
-        price: item.price,
-        size: item.size,
-        color: item.color
-      }));
+      const cart = await Cart.findOne({ userId }).populate('items.productId');
+      if (!cart) {
+        console.error("❌ Logic Error: Payment successful but Cart not found.");
+        return res.status(200).json({ received: true });
+      }
 
-      // 4. Update Stock
+      // Create the Order
+      const newOrder = await Order.create({
+        userId,
+        checkoutSessionId: session.id,
+        items: cart.items.map(item => ({
+          productId: item.productId._id,
+          name: item.productId.name,
+          quantity: item.quantity,
+          price: item.price,
+          size: item.size
+        })),
+        totalAmount: cart.totalAmount,
+        shippingInfo: { 
+          fullName, 
+          address, 
+          contactNumber, 
+          deliveryInstructions: instructions 
+        },
+        paymentMethod: session.payment_method_used || 'gcash',
+        paymentStatus: 'paid',
+        status: 'Order in Progress'
+      });
+
+      // Stock management
       for (const item of cart.items) {
         await Product.updateOne(
           { _id: item.productId._id, "sizes.size": item.size },
@@ -265,43 +291,15 @@ export const handlePayMongoWebhook = async (req, res) => {
         );
       }
 
-      // 5. Save Order (Matches your Schema: 'Order in Progress')
-      const newOrder = new Order({
-        userId,
-        items: orderItems,
-        shippingInfo: { 
-          address, 
-          contactNumber, 
-          deliveryInstructions: instructions,
-          fullName: metadata.fullName || "Customer" // Added fallback
-        },
-        totalAmount: cart.totalAmount,
-        paymentMethod: 'gcash', // Or extract from sessionData.payment_method_used
-        paymentStatus: 'paid',
-        status: 'Order in Progress', 
-        checkoutSessionId: sessionData.id // Good for tracking
-      });
-
-      await newOrder.save();
-
-      // 6. Final Cleanup
       await Cart.findOneAndDelete({ userId });
-      
-      const userRecord = await User.findById(userId);
-      if (userRecord) {
-        await sendOrderConfirmation(newOrder, userRecord);
-      }
-
-      console.log(`✅ SUCCESS: Order ${newOrder._id} finalized. Cart cleared.`);
-      return res.status(200).json({ received: true });
-
-    } catch (err) {
-      console.error("🔥 Webhook Processing Error:", err);
-      return res.status(500).send("Internal Server Error");
+      console.log(`✅ Success: Order ${newOrder._id} created. Cart wiped.`);
     }
-  }
 
-  res.status(200).send('Event ignored');
+    return res.status(200).json({ received: true });
+  } catch (err) {
+    console.error("🔥 Webhook Fatal Error:", err.message);
+    return res.status(500).send("Internal Server Error");
+  }
 };
 
 export const getOrderById = async (req, res) => {
