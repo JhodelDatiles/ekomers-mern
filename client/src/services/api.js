@@ -259,6 +259,10 @@ export const orderAPI = {
     const response = await api.put(`/orders/${orderId}/cancel`);
     return response.data;
   },
+  confirmQrPhOrder: async (data) => {
+    const response = await api.post('/orders/confirm-qrph', data);
+    return response.data;
+  },
   deleteOrder: async (orderId) => {
     const response = await api.delete(`/orders/${orderId}`);
     return response.data;

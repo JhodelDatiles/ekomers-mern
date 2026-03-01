@@ -14,7 +14,7 @@ const Checkout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, setUser, loading: authLoading } = useAuth();
-  const { removeFromCart, fetchCart } = useCart(); // ← get cart controls
+  const { updateLocalCartAfterPayment, fetchCart } = useCart();
 
   const checkoutItems = useMemo(() => location.state?.items || [], [location.state?.items]);
   const checkoutTotal = location.state?.total || 0;
@@ -44,22 +44,40 @@ const Checkout = () => {
     const interval = setInterval(async () => {
       try {
         const { status } = await paymentAPI.checkQrPhStatus(paymentIntentId);
+        
         if (status === 'succeeded') {
           clearInterval(interval);
           setPollingId(null);
           setShowQrModal(false);
 
-          // ✅ Remove purchased items from cart UI
+          // 1. Clear cart UI immediately
+          const paidItemIds = checkoutItems.map(item => item._id);
+          updateLocalCartAfterPayment(paidItemIds);
+
+          // 2. Create the order in our database
           try {
-            for (const item of checkoutItems) {
-              await removeFromCart(item._id);
-            }
-          } catch (err) {
-            // If individual removal fails, refresh the whole cart
-            if (fetchCart) await fetchCart();
+            await orderAPI.confirmQrPhOrder({
+              paymentIntentId,
+              items: checkoutItems,
+              totalAmount: checkoutTotal,
+              shippingInfo: {
+                fullName: activeAddress.fullName,
+                address: activeAddress.address || activeAddress.street,
+                city: activeAddress.city,
+                postalCode: activeAddress.postalCode,
+                contactNumber: activeAddress.contactNumber,
+              }
+            });
+            console.log("✅ Order saved to database");
+          } catch (orderErr) {
+            console.error("❌ Order save failed:", orderErr.message);
+            // Don't block navigation — payment was successful
           }
 
-          toast.success("Payment Received!");
+          // 3. Sync cart with server
+          fetchCart(false);
+
+          toast.success("Payment Received! Order placed.");
           navigate('/payment-success');
         }
       } catch (err) {
@@ -96,8 +114,7 @@ const Checkout = () => {
       startPollingIntent(result.paymentIntentId);
     } catch (err) {
       console.error("QR PH Error:", err.response?.data);
-      const errMsg = err.response?.data?.message || err.message || "Unknown error";
-      toast.error(`Failed: ${errMsg}`);
+      toast.error(err.response?.data?.message || "QR PH failed");
     } finally {
       setLoading(false);
       toast.dismiss(toastId);
@@ -168,7 +185,6 @@ const Checkout = () => {
       {/* LEFT COLUMN */}
       <div className="lg:col-span-8 space-y-6">
         
-        {/* WAYPOINT STATUS BANNER */}
         <div className="relative h-40 w-full bg-[#121212] rounded-[32px] border border-white/5 overflow-hidden flex items-center px-10">
           <div className="absolute top-0 right-0 p-8 opacity-10">
             <MapIcon size={120} className="text-primary" />
@@ -196,7 +212,6 @@ const Checkout = () => {
           </div>
         </div>
 
-        {/* RECIPIENT & CONTACT */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-[#121212] border border-white/5 rounded-[24px] p-6">
             <label className="text-[10px] font-black uppercase opacity-30 text-white flex items-center gap-2 mb-3">
@@ -216,7 +231,6 @@ const Checkout = () => {
           </div>
         </div>
 
-        {/* FULL ADDRESS */}
         <div className="bg-[#121212] border border-white/5 rounded-[24px] p-8">
           <label className="text-[10px] font-black uppercase opacity-30 text-white flex items-center gap-2 mb-4">
             <Navigation size={12}/> Endpoint Location
@@ -262,7 +276,6 @@ const Checkout = () => {
             </span>
           </div>
 
-          {/* MAIN CHECKOUT BUTTON */}
           <button 
             onClick={handleSubmit} 
             disabled={loading || !activeAddress} 
@@ -271,7 +284,6 @@ const Checkout = () => {
             {loading ? <Loader2 className="animate-spin" /> : <>Checkout <ShieldCheck size={20} /></>}
           </button>
 
-          {/* QR PH BUTTON */}
           <button
             onClick={handleQrPhPayment}
             disabled={loading || !activeAddress}
@@ -289,7 +301,7 @@ const Checkout = () => {
       {/* QR MODAL */}
       {showQrModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center backdrop-blur-xl bg-black/90 p-4">
-          <div className="bg-[#121212] border border-primary/20 p-8 rounded-[40px] max-w-sm w-full text-center shadow-[0_0_50px_rgba(var(--primary),0.1)]">
+          <div className="bg-[#121212] border border-primary/20 p-8 rounded-[40px] max-w-sm w-full text-center">
             <h2 className="text-2xl font-black uppercase italic text-white mb-2">Scan to Pay</h2>
             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-6">GCash • Maya • ShopeePay</p>
             

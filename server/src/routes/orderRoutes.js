@@ -3,27 +3,29 @@ import {
   initiatePayMongoCheckout, 
   getUserOrders, 
   getOrderById,
+  handlePayMongoWebhook,
   confirmDelivery,
   deleteOrder,
-  cancelOrder // Ensure this is exported in orderController.js
+  cancelOrder,
+  confirmQrPhOrder
 } from '../controllers/orderController.js';
-import { handlePayMongoWebhook } from '../controllers/webhookController.js'; // ← fixed import
 import { protect } from '../middlewares/protect.js';
 
 const router = express.Router();
 
 // 1. Webhook: MUST be public so PayMongo can hit it
-// It is handled BEFORE any 'protect' middleware
 router.post('/webhook', handlePayMongoWebhook);
 
-// 2. Checkout: Initiates PayMongo Session
+// 2. QR PH direct confirmation — frontend calls this after polling detects success
+router.post('/confirm-qrph', protect, confirmQrPhOrder);
+
+// 3. Checkout
 router.post('/checkout-session', protect, initiatePayMongoCheckout);
 
-// 3. User History & Logistics
+// 4. User orders
 router.get('/', protect, getUserOrders);
 router.get('/:id', protect, getOrderById);
 
-// 🚀 NEW: Logistics for the user to confirm they received the item
 router.put('/:id/cancel', protect, cancelOrder);
 router.put('/:id/confirm-delivery', protect, confirmDelivery);
 router.delete('/:id', protect, deleteOrder);
