@@ -373,53 +373,58 @@ export const cancelOrder = async (req, res) => {
     res.status(500).json({ message: "Failed to request cancellation" });
   }
 };
-// Called by frontend after polling detects payment success
+
+// ─────────────────────────────────────────────────────────────────
+// CONFIRM QR PH ORDER — frontend fallback after polling succeeds
+// SECURITY: never trusts frontend data — looks up pending order
+// created server-side in createQrPhPayment
+// ─────────────────────────────────────────────────────────────────
 export const confirmQrPhOrder = async (req, res) => {
   try {
-    const { paymentIntentId, items, shippingInfo, totalAmount } = req.body;
+    const { paymentIntentId } = req.body;
     const userId = req.user.id;
 
-    // Prevent duplicate orders
-    const existing = await Order.findOne({ paymentIntentId });
-    if (existing) {
-      console.log("⚠️ QR PH order already exists:", existing._id);
-      return res.status(200).json({ order: existing, alreadyExists: true });
+    if (!paymentIntentId) {
+      return res.status(400).json({ message: 'paymentIntentId required' });
     }
 
-    // Verify payment with PayMongo
+    // 1. Find the pending order saved during QR creation
+    const pendingOrder = await Order.findOne({ paymentIntentId });
+    if (!pendingOrder) {
+      return res.status(404).json({ message: 'Order not found for this payment intent' });
+    }
+
+    // 2. Verify order belongs to this user — prevent ID hijacking
+    if (String(pendingOrder.userId) !== String(userId)) {
+      console.error('🚨 userId mismatch on confirmQrPhOrder — possible fraud');
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // 3. Already confirmed (webhook may have fired first)
+    if (pendingOrder.paymentStatus === 'paid') {
+      return res.status(200).json({ order: pendingOrder, alreadyConfirmed: true });
+    }
+
+    // 4. Verify payment actually succeeded with PayMongo (server-to-server)
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
     const intentRes = await axios.get(
       `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}`,
       { headers: { authorization: authHeader } }
     );
+
     const piStatus = intentRes.data.data.attributes.status;
     if (piStatus !== 'succeeded') {
       return res.status(400).json({ message: `Payment not confirmed. Status: ${piStatus}` });
     }
 
-    const orderItems = items.map(item => ({
-      productId: item.productId?._id || item.productId,
-      name: item.productId?.name || item.name,
-      price: item.price,
-      quantity: item.quantity,
-      size: item.size || 'N/A',
-      image: item.productId?.images?.[0]?.url || item.image
-    }));
+    // 5. Update the pending order to paid
+    pendingOrder.paymentStatus = 'paid';
+    pendingOrder.status = 'Order in Progress';
+    await pendingOrder.save();
 
-    const newOrder = await Order.create({
-      userId,
-      paymentIntentId,
-      items: orderItems,
-      totalAmount,
-      shippingInfo,
-      paymentMethod: 'qrph',
-      paymentStatus: 'paid',
-      status: 'Order in Progress'
-    });
-
-    // Deduct stock
-    for (const item of orderItems) {
+    // 6. Deduct stock
+    for (const item of pendingOrder.items) {
       if (item.productId && item.size) {
         await Product.updateOne(
           { _id: item.productId, "sizes.size": item.size },
@@ -428,38 +433,34 @@ export const confirmQrPhOrder = async (req, res) => {
       }
     }
 
-    // ✅ Delete purchased items from cart in database
-    const purchasedCartItemIds = items.map(i => i._id).filter(Boolean);
-    if (purchasedCartItemIds.length > 0) {
-      // Remove only the purchased items (user may have other items in cart)
-      await Cart.updateOne(
-        { userId },
-        { $pull: { items: { _id: { $in: purchasedCartItemIds } } } }
+    // 7. Remove purchased items from cart in DB
+    const cart = await Cart.findOne({ userId });
+    if (cart) {
+      const remainingItems = cart.items.filter(cartItem =>
+        !pendingOrder.items.some(o => String(o.productId) === String(cartItem.productId) && o.size === cartItem.size)
       );
-      // Recalculate totalAmount on remaining cart items
-      const updatedCart = await Cart.findOne({ userId });
-      if (updatedCart) {
-        updatedCart.totalAmount = updatedCart.items.reduce(
-          (sum, item) => sum + (item.price * item.quantity), 0
-        );
-        await updatedCart.save();
+      if (remainingItems.length === 0) {
+        await Cart.findOneAndDelete({ userId });
+      } else {
+        cart.items = remainingItems;
+        cart.totalAmount = remainingItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        await cart.save();
       }
-      console.log(`🧹 Cart cleaned: removed ${purchasedCartItemIds.length} items for user ${userId}`);
     }
 
-    // Send confirmation email
+    // 8. Send confirmation email
     try {
       const user = await User.findById(userId);
-      if (user?.email) await sendOrderConfirmation(newOrder, user);
+      if (user?.email) await sendOrderConfirmation(pendingOrder, user);
     } catch (emailErr) {
-      console.error("Email failed:", emailErr.message);
+      console.error('📧 Email failed:', emailErr.message);
     }
 
-    console.log(`✅ QR PH order confirmed: ${newOrder._id}`);
-    res.status(201).json({ order: newOrder });
+    console.log(`✅ QR PH order confirmed: ${pendingOrder._id}`);
+    res.status(200).json({ order: pendingOrder });
 
   } catch (error) {
-    console.error("❌ confirmQrPhOrder error:", error.message);
-    res.status(500).json({ message: "Failed to confirm order", error: error.message });
+    console.error('❌ confirmQrPhOrder error:', error.message);
+    res.status(500).json({ message: 'Failed to confirm order', error: error.message });
   }
 };
