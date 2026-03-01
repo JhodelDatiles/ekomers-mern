@@ -10,78 +10,78 @@ import { config } from '../envconfig.js';
 // SHARED ORDER CREATION LOGIC
 // Used by both webhook AND frontend fallback to avoid duplication
 // ─────────────────────────────────────────────────────────────────
-export const createQrPhOrderFromIntent = async (paymentIntentId, userId, items, shippingInfo, totalAmount) => {
-  // 1. Prevent duplicates — idempotency check
-  const existing = await Order.findOne({ paymentIntentId });
-  if (existing) {
-    console.log(`⚠️ Order already exists for intent ${paymentIntentId}`);
-    return { order: existing, alreadyExists: true };
-  }
+// export const createQrPhOrderFromIntent = async (paymentIntentId, userId, items, shippingInfo, totalAmount) => {
+//   // 1. Prevent duplicates — idempotency check
+//   const existing = await Order.findOne({ paymentIntentId });
+//   if (existing) {
+//     console.log(`⚠️ Order already exists for intent ${paymentIntentId}`);
+//     return { order: existing, alreadyExists: true };
+//   }
 
-  // 2. Build order items
-  const orderItems = items.map(item => ({
-    productId: item.productId?._id || item.productId,
-    name: item.productId?.name || item.name,
-    price: item.price,
-    quantity: item.quantity,
-    size: item.size || 'N/A',
-    image: item.productId?.images?.[0]?.url || item.image
-  }));
+//   // 2. Build order items
+//   const orderItems = items.map(item => ({
+//     productId: item.productId?._id || item.productId,
+//     name: item.productId?.name || item.name,
+//     price: item.price,
+//     quantity: item.quantity,
+//     size: item.size || 'N/A',
+//     image: item.productId?.images?.[0]?.url || item.image
+//   }));
 
-  if (!orderItems.length || !orderItems[0].name) {
-    throw new Error('Invalid order items — missing name');
-  }
+//   if (!orderItems.length || !orderItems[0].name) {
+//     throw new Error('Invalid order items — missing name');
+//   }
 
-  // 3. Create order
-  const newOrder = await Order.create({
-    userId,
-    paymentIntentId,
-    items: orderItems,
-    totalAmount,
-    shippingInfo,
-    paymentMethod: 'qrph',
-    paymentStatus: 'paid',
-    status: 'Order in Progress'
-  });
+//   // 3. Create order
+//   const newOrder = await Order.create({
+//     userId,
+//     paymentIntentId,
+//     items: orderItems,
+//     totalAmount,
+//     shippingInfo,
+//     paymentMethod: 'qrph',
+//     paymentStatus: 'paid',
+//     status: 'Order in Progress'
+//   });
 
-  // 4. Deduct stock
-  for (const item of orderItems) {
-    if (item.productId && item.size) {
-      await Product.updateOne(
-        { _id: item.productId, "sizes.size": item.size },
-        { $inc: { "sizes.$.stock": -item.quantity } }
-      );
-    }
-  }
+//   // 4. Deduct stock
+//   for (const item of orderItems) {
+//     if (item.productId && item.size) {
+//       await Product.updateOne(
+//         { _id: item.productId, "sizes.size": item.size },
+//         { $inc: { "sizes.$.stock": -item.quantity } }
+//       );
+//     }
+//   }
 
-  // 5. Clear purchased cart items from DB
-  const cartItemIds = items.map(i => i._id).filter(Boolean);
-  if (cartItemIds.length > 0) {
-    await Cart.updateOne(
-      { userId },
-      { $pull: { items: { _id: { $in: cartItemIds } } } }
-    );
-    // Recalculate cart total
-    const updatedCart = await Cart.findOne({ userId });
-    if (updatedCart) {
-      updatedCart.totalAmount = updatedCart.items.reduce(
-        (sum, i) => sum + (i.price * i.quantity), 0
-      );
-      await updatedCart.save();
-    }
-  }
+//   // 5. Clear purchased cart items from DB
+//   const cartItemIds = items.map(i => i._id).filter(Boolean);
+//   if (cartItemIds.length > 0) {
+//     await Cart.updateOne(
+//       { userId },
+//       { $pull: { items: { _id: { $in: cartItemIds } } } }
+//     );
+//     // Recalculate cart total
+//     const updatedCart = await Cart.findOne({ userId });
+//     if (updatedCart) {
+//       updatedCart.totalAmount = updatedCart.items.reduce(
+//         (sum, i) => sum + (i.price * i.quantity), 0
+//       );
+//       await updatedCart.save();
+//     }
+//   }
 
-  // 6. Send confirmation email (non-blocking)
-  try {
-    const user = await User.findById(userId);
-    if (user?.email) await sendOrderConfirmation(newOrder, user);
-  } catch (emailErr) {
-    console.error('📧 Email failed:', emailErr.message);
-  }
+//   // 6. Send confirmation email (non-blocking)
+//   try {
+//     const user = await User.findById(userId);
+//     if (user?.email) await sendOrderConfirmation(newOrder, user);
+//   } catch (emailErr) {
+//     console.error('📧 Email failed:', emailErr.message);
+//   }
 
-  console.log(`✅ Order created: ${newOrder._id}`);
-  return { order: newOrder, alreadyExists: false };
-};
+//   console.log(`✅ Order created: ${newOrder._id}`);
+//   return { order: newOrder, alreadyExists: false };
+// };
 
 
 export const handlePayMongoWebhook = async (req, res) => {
