@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { 
   Phone, Loader2, Hash, Navigation, Map as MapIcon, 
-  ShieldCheck, Edit3, X, CheckCircle2, QrCode
+  ShieldCheck, Edit3, X, CheckCircle2, QrCode, AlertCircle
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
@@ -23,9 +23,16 @@ const Checkout = () => {
   const [isSyncing, setIsSyncing] = useState(false); 
   const [activeAddress, setActiveAddress] = useState(null);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+
+  // QR PH state
   const [qrCode, setQrCode] = useState(null);
   const [showQrModal, setShowQrModal] = useState(false);
   const [pollingId, setPollingId] = useState(null);
+  const [qrStatus, setQrStatus] = useState('waiting'); // waiting | saving | done | error
+  
+  // Use ref for activeAddress so polling closure always has latest value
+  const activeAddressRef = useRef(activeAddress);
+  useEffect(() => { activeAddressRef.current = activeAddress; }, [activeAddress]);
 
   const autoSyncNode = useCallback(async () => {
     if (isSyncing) return;
@@ -40,7 +47,13 @@ const Checkout = () => {
     }
   }, [setUser, isSyncing]);
 
-  const startPollingIntent = (paymentIntentId) => {
+  // ─────────────────────────────────────────────────────────────────
+  // QR PH POLLING — Best practice flow:
+  // 1. Poll until PayMongo confirms succeeded
+  // 2. Call backend to verify + save order (server verifies with PayMongo)
+  // 3. Only navigate AFTER order is confirmed saved
+  // ─────────────────────────────────────────────────────────────────
+  const startPollingIntent = useCallback((paymentIntentId) => {
     const interval = setInterval(async () => {
       try {
         const { status } = await paymentAPI.checkQrPhStatus(paymentIntentId);
@@ -48,41 +61,43 @@ const Checkout = () => {
         if (status === 'succeeded') {
           clearInterval(interval);
           setPollingId(null);
-          setShowQrModal(false);
+          setQrStatus('saving');
 
-          // Navigate immediately — do NOT await anything before this
-          toast.success("Payment Received! Order placed.");
-          navigate('/payment-success');
+          const addr = activeAddressRef.current;
 
-          // Clear cart UI
-          const paidItemIds = checkoutItems.map(item => item._id);
-          updateLocalCartAfterPayment(paidItemIds);
+          try {
+            // Backend verifies with PayMongo + confirms the pending order
+            // No frontend data sent — backend uses server-saved pending order
+            await orderAPI.confirmQrPhOrder({ paymentIntentId });
 
-          // Save order to DB non-blocking
-          orderAPI.confirmQrPhOrder({
-            paymentIntentId,
-            items: checkoutItems,
-            totalAmount: checkoutTotal,
-            shippingInfo: {
-              fullName: activeAddress?.fullName,
-              address: activeAddress?.address || activeAddress?.street,
-              city: activeAddress?.city,
-              postalCode: activeAddress?.postalCode,
-              contactNumber: activeAddress?.contactNumber,
-            }
-          })
-          .then(() => { fetchCart(false); console.log("✅ Order saved"); })
-          .catch(err => { console.error("❌ Order save failed:", err.message); fetchCart(false); });
+            setQrStatus('done');
+
+            // Clear cart UI + sync with DB
+            updateLocalCartAfterPayment(checkoutItems.map(i => i._id));
+            fetchCart(false);
+
+            toast.success("Payment confirmed! Order placed.");
+
+            // Small delay so user sees the success state
+            setTimeout(() => navigate('/payment-success'), 800);
+
+          } catch (saveErr) {
+            console.error("❌ Order save failed:", saveErr.message);
+            setQrStatus('error');
+            // Don't navigate — show error in modal so user knows to contact support
+            // Payment DID succeed, order just failed to save
+            toast.error("Payment received but order failed to save. Please contact support.");
+          }
         }
       } catch (err) {
         console.error("Polling error", err);
       }
     }, 3000);
     setPollingId(interval);
-  };
+  }, [checkoutItems, checkoutTotal, navigate, updateLocalCartAfterPayment, fetchCart]);
 
   const handleQrPhPayment = async () => {
-    if (!activeAddress) return toast.error("No shipping node detected.");
+    if (!activeAddress) return toast.error("No shipping address selected.");
     setLoading(true);
     const toastId = toast.loading("Generating QR Code...");
     try {
@@ -104,17 +119,19 @@ const Checkout = () => {
       }
 
       setQrCode(result.qrImage);
+      setQrStatus('waiting');
       setShowQrModal(true);
       startPollingIntent(result.paymentIntentId);
     } catch (err) {
       console.error("QR PH Error:", err.response?.data);
-      toast.error(err.response?.data?.message || "QR PH failed");
+      toast.error(err.response?.data?.message || "Failed to generate QR code");
     } finally {
       setLoading(false);
       toast.dismiss(toastId);
     }
   };
 
+  // Cleanup polling on unmount
   useEffect(() => {
     return () => { if (pollingId) clearInterval(pollingId); };
   }, [pollingId]);
@@ -147,7 +164,7 @@ const Checkout = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!activeAddress) return toast.error("No shipping node detected.");
+    if (!activeAddress) return toast.error("No shipping address selected.");
     setLoading(true);
     const toastId = toast.loading("Authorizing Dispatch...");
     try {
@@ -309,22 +326,48 @@ const Checkout = () => {
               )}
             </div>
 
+            {/* Status indicator */}
             <div className="space-y-4">
-              <div className="flex items-center justify-center gap-2 text-primary animate-pulse">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-[10px] font-black uppercase italic">Awaiting Confirmation...</span>
-              </div>
-              <button 
-                onClick={() => {
-                  if (pollingId) clearInterval(pollingId);
-                  setPollingId(null);
-                  setShowQrModal(false);
-                  setQrCode(null);
-                }}
-                className="text-[10px] font-black uppercase text-white/20 hover:text-error transition-all"
-              >
-                Cancel Transaction
-              </button>
+              {qrStatus === 'waiting' && (
+                <div className="flex items-center justify-center gap-2 text-primary animate-pulse">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-[10px] font-black uppercase italic">Awaiting Payment...</span>
+                </div>
+              )}
+              {qrStatus === 'saving' && (
+                <div className="flex items-center justify-center gap-2 text-warning animate-pulse">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-[10px] font-black uppercase italic">Confirming Order...</span>
+                </div>
+              )}
+              {qrStatus === 'done' && (
+                <div className="flex items-center justify-center gap-2 text-success">
+                  <CheckCircle2 size={16} />
+                  <span className="text-[10px] font-black uppercase italic">Order Confirmed!</span>
+                </div>
+              )}
+              {qrStatus === 'error' && (
+                <div className="flex flex-col items-center gap-2 text-error">
+                  <AlertCircle size={20} />
+                  <span className="text-[10px] font-black uppercase italic">Payment received but order failed.</span>
+                  <span className="text-[9px] opacity-60">Please contact support with your payment ID.</span>
+                </div>
+              )}
+
+              {qrStatus === 'waiting' && (
+                <button 
+                  onClick={() => {
+                    if (pollingId) clearInterval(pollingId);
+                    setPollingId(null);
+                    setShowQrModal(false);
+                    setQrCode(null);
+                    setQrStatus('waiting');
+                  }}
+                  className="text-[10px] font-black uppercase text-white/20 hover:text-error transition-all"
+                >
+                  Cancel Transaction
+                </button>
+              )}
             </div>
           </div>
         </div>

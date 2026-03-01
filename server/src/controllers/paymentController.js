@@ -224,23 +224,39 @@ export const createEWalletSource = async (req, res) => {
 
 export const createQrPhPayment = async (req, res) => {
   try {
-    const { amount, items, shippingInfo } = req.body;
+    const { shippingInfo } = req.body;
+    const userId = req.user.id;
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
 
-    // Step 1: Create Payment Intent
+    // SECURITY: Load cart from DB — never trust frontend for prices
+    const cart = await Cart.findOne({ userId }).populate('items.productId');
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ message: 'Cart is empty' });
+    }
+
+    const serverTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const amountInCentavos = Math.round(serverTotal * 100);
+
+    const orderItems = cart.items.map(item => ({
+      productId: item.productId._id,
+      name: item.productId.name,
+      price: item.price,
+      quantity: item.quantity,
+      size: item.size || 'N/A',
+      image: item.productId?.images?.[0]?.url,
+      cartItemId: String(item._id)
+    }));
+
+    // Step 1: Create Payment Intent with server-calculated amount
     const intentRes = await axios.post('https://api.paymongo.com/v1/payment_intents', {
       data: {
         attributes: {
-          amount: Math.round(amount * 100),
+          amount: amountInCentavos,
           payment_method_allowed: ['qrph'],
           currency: 'PHP',
           description: 'EKOMERS Order Payment',
-          metadata: {
-            userId: String(req.user.id),
-            shippingInfo: JSON.stringify(shippingInfo),
-            items: JSON.stringify(items)
-          }
+          metadata: { userId: String(userId) }
         }
       }
     }, { headers: { authorization: authHeader, 'Content-Type': 'application/json' } });
@@ -250,9 +266,7 @@ export const createQrPhPayment = async (req, res) => {
 
     // Step 2: Create QR PH Payment Method
     const methodRes = await axios.post('https://api.paymongo.com/v1/payment_methods', {
-      data: {
-        attributes: { type: 'qrph' }
-      }
+      data: { attributes: { type: 'qrph' } }
     }, { headers: { authorization: authHeader, 'Content-Type': 'application/json' } });
 
     const paymentMethodId = methodRes.data.data.id;
@@ -260,32 +274,28 @@ export const createQrPhPayment = async (req, res) => {
     // Step 3: Attach Payment Method to Intent
     const attachRes = await axios.post(
       `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}/attach`,
-      {
-        data: {
-          attributes: {
-            payment_method: paymentMethodId,
-            client_key: clientKey
-          }
-        }
-      },
+      { data: { attributes: { payment_method: paymentMethodId, client_key: clientKey } } },
       { headers: { authorization: authHeader, 'Content-Type': 'application/json' } }
     );
 
     const attrs = attachRes.data.data.attributes;
-    const nextAction = attrs.next_action;
+    const qrImage = attrs.next_action?.code?.image_url || attrs.next_action?.data?.image_url;
 
-    // PayMongo returns QR image at next_action.code.image_url (base64 PNG)
-    const qrImage = nextAction?.code?.image_url
-      || nextAction?.data?.image_url
-      || nextAction?.image_url;
-
-    console.log(`✅ Step 3 - Status: ${attrs.status}`);
-
-    res.status(200).json({
+    // SECURITY: Save pending order NOW with server-verified data
+    // confirmQrPhOrder will just update this — no frontend data trusted
+    await Order.create({
+      userId,
       paymentIntentId,
-      qrImage,
-      status: attrs.status
+      items: orderItems.map(i => ({ productId: i.productId, name: i.name, price: i.price, quantity: i.quantity, size: i.size, image: i.image })),
+      totalAmount: serverTotal,
+      shippingInfo,
+      paymentMethod: 'qrph',
+      paymentStatus: 'pending',
+      status: 'Pending'
     });
+
+    console.log(`✅ QR PH pending order created: ${paymentIntentId}`);
+    res.status(200).json({ paymentIntentId, qrImage, status: attrs.status });
 
   } catch (error) {
     console.error('❌ QR PH Error:', error.response?.data || error.message);
