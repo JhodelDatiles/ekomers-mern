@@ -50,35 +50,29 @@ const Checkout = () => {
           setPollingId(null);
           setShowQrModal(false);
 
-          // 1. Clear cart UI immediately
+          // Navigate immediately — do NOT await anything before this
+          toast.success("Payment Received! Order placed.");
+          navigate('/payment-success');
+
+          // Clear cart UI
           const paidItemIds = checkoutItems.map(item => item._id);
           updateLocalCartAfterPayment(paidItemIds);
 
-          // 2. Create the order in our database
-          try {
-            await orderAPI.confirmQrPhOrder({
-              paymentIntentId,
-              items: checkoutItems,
-              totalAmount: checkoutTotal,
-              shippingInfo: {
-                fullName: activeAddress.fullName,
-                address: activeAddress.address || activeAddress.street,
-                city: activeAddress.city,
-                postalCode: activeAddress.postalCode,
-                contactNumber: activeAddress.contactNumber,
-              }
-            });
-            console.log("✅ Order saved to database");
-          } catch (orderErr) {
-            console.error("❌ Order save failed:", orderErr.message);
-            // Don't block navigation — payment was successful
-          }
-
-          // 3. Sync cart with server
-          fetchCart(false);
-
-          toast.success("Payment Received! Order placed.");
-          navigate('/payment-success');
+          // Save order to DB non-blocking
+          orderAPI.confirmQrPhOrder({
+            paymentIntentId,
+            items: checkoutItems,
+            totalAmount: checkoutTotal,
+            shippingInfo: {
+              fullName: activeAddress?.fullName,
+              address: activeAddress?.address || activeAddress?.street,
+              city: activeAddress?.city,
+              postalCode: activeAddress?.postalCode,
+              contactNumber: activeAddress?.contactNumber,
+            }
+          })
+          .then(() => { fetchCart(false); console.log("✅ Order saved"); })
+          .catch(err => { console.error("❌ Order save failed:", err.message); fetchCart(false); });
         }
       } catch (err) {
         console.error("Polling error", err);
