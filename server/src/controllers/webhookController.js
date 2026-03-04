@@ -100,18 +100,24 @@ export const handlePayMongoWebhook = async (req, res) => {
     return res.status(200).json({ received: true });
   }
 
-  // ─── PAYMENT INTENT (QR PH) — Webhook updates pending order ───
-  if (type === 'payment_intent.succeeded') {
+  // ─── PAYMENT PAID (QR PH via payment.paid event) ───
+  if (type === 'payment.paid') {
     try {
-      const paymentIntent = event.data;
-      const paymentIntentId = paymentIntent.id;
-      const metadata = paymentIntent.attributes?.metadata;
+      const payment = event.data;
+      const paymentIntentId = payment.attributes?.payment_intent_id;
+
+      console.log(`💳 payment.paid — intent: ${paymentIntentId}`);
+
+      if (!paymentIntentId) {
+        console.log('⚠️ No payment_intent_id on payment.paid event');
+        return res.status(200).json({ received: true });
+      }
 
       // Find the pending order created during QR generation
       const pendingOrder = await Order.findOne({ paymentIntentId });
 
       if (!pendingOrder) {
-        console.log(`⚠️ No pending order for intent ${paymentIntentId} — may already be confirmed`);
+        console.log(`⚠️ No pending order for intent ${paymentIntentId}`);
         return res.status(200).json({ received: true });
       }
 
@@ -146,9 +152,9 @@ export const handlePayMongoWebhook = async (req, res) => {
         if (user?.email) await sendOrderConfirmation(pendingOrder, user);
       } catch (e) { console.error('📧 Email failed:', e.message); }
 
-      console.log(`✅ QR PH order confirmed via webhook: ${pendingOrder._id}`);
+      console.log(`✅ QR PH order confirmed via payment.paid webhook: ${pendingOrder._id}`);
     } catch (err) {
-      console.error('❌ QR PH webhook error:', err.message);
+      console.error('❌ payment.paid webhook error:', err.message);
     }
     return res.status(200).json({ received: true });
   }
