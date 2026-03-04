@@ -1,66 +1,93 @@
-import transporter from '../config/email.js';
+import { config } from '../envconfig.js';
 import { orderConfirmationEmail, verificationEmailTemplate } from '../utils/emailTemplates.js';
-import {config} from '../envconfig.js';
 
-// Logic for Order Emails
+// ─────────────────────────────────────────────────────────────────
+// Resend HTTP API — works on Render free tier (no SMTP port issues)
+// ─────────────────────────────────────────────────────────────────
+const sendEmail = async ({ to, subject, html, text }) => {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.resendApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: config.emailFrom,
+      to,
+      subject,
+      html,
+      text,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.message || `Resend error: ${res.status}`);
+  }
+
+  return data;
+};
+
+// ─── Order Confirmation ───
 export const sendOrderConfirmation = async (order, user) => {
   try {
-    const mailOptions = {
-      from: `"Your Store Name" <${process.env.EMAIL_USER}>`,
+    await sendEmail({
       to: user.email,
-      subject: `Order Confirmation - #${order._id}`,
-      html: orderConfirmationEmail(order, user)
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log('Order confirmation email sent to:', user.email);
+      subject: `Order Confirmed — #${order._id}`,
+      html: orderConfirmationEmail(order, user),
+    });
+    console.log('✅ Order confirmation email sent to:', user.email);
   } catch (error) {
-    console.error('Error sending order email:', error);
+    console.error('❌ Order email failed:', error.message);
   }
 };
 
-// Logic for Security Code Emails
+// ─── Security Code (password reset / account deletion) ───
 export const sendSecurityCode = async (user, code, type) => {
   try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    await sendEmail({
       to: user.email,
-      subject: type === 'password' ? 'Password Change Code' : 'Account Deletion Code',
+      subject: type === 'password' ? 'Password Reset Code' : 'Account Deletion Code',
       text: `Your security code is: ${code}. It expires in 10 minutes.`,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ Email sent successfully:", info.messageId);
+      html: `
+        <div style="font-family: sans-serif; max-width: 400px; margin: auto; padding: 40px; background: #0a0a0a; color: #fff; border-radius: 16px; text-align: center;">
+          <h2 style="font-style: italic; text-transform: uppercase; letter-spacing: -1px;">Security Code</h2>
+          <p style="color: #aaa; font-size: 13px;">Use this code to ${type === 'password' ? 'reset your password' : 'delete your account'}. It expires in <strong>10 minutes</strong>.</p>
+          <div style="font-size: 40px; font-weight: 900; letter-spacing: 8px; color: #fff; background: #1a1a1a; padding: 24px; border-radius: 12px; margin: 24px 0;">
+            ${code}
+          </div>
+          <p style="color: #555; font-size: 11px;">If you didn't request this, ignore this email.</p>
+        </div>
+      `,
+    });
+    console.log('✅ Security code email sent to:', user.email);
     return true;
   } catch (error) {
-    // THIS LOG IS CRITICAL - Look at your terminal after adding this
-    console.error("❌ NODEMAILER ERROR:", error.message);
+    console.error('❌ Security code email failed:', error.message);
     return false;
   }
 };
 
+// ─── Email Verification ───
 export const sendVerificationEmail = async (user) => {
   try {
-    // Use the field we just saved in the controller
-    const token = user.verificationToken; 
-    
-    if (!token) throw new Error("No token found for user");
+    const token = user.verificationToken;
+    if (!token) throw new Error('No verification token found on user');
 
     const verificationUrl = `${config.clientUrl}/verify-email/${token}`;
-    
-    console.log(`🔗 [DEBUG] Sending Link: ${verificationUrl}`);
+    console.log(`🔗 Verification link: ${verificationUrl}`);
 
-    const mailOptions = {
-      from: `"EKOMERS" <${process.env.EMAIL_USER}>`,
+    await sendEmail({
       to: user.email,
-      subject: 'Verify Your Email',
-      html: verificationEmailTemplate(user.username, verificationUrl)
-    };
+      subject: 'Verify Your Email — EKOMERS',
+      html: verificationEmailTemplate(user.username, verificationUrl),
+    });
 
-    await transporter.sendMail(mailOptions);
+    console.log('✅ Verification email sent to:', user.email);
     return true;
   } catch (error) {
-    console.error('❌ Email Error:', error.message);
+    console.error('❌ Verification email failed:', error.message);
     return false;
   }
 };
