@@ -58,7 +58,17 @@ const Checkout = () => {
   // ─────────────────────────────────────────────────────────────────
   const startPollingIntent = useCallback((paymentIntentId) => {
     let attempts = 0;
-    const MAX_ATTEMPTS = 60; // 3 mins (60 × 3s)
+    const MAX_ATTEMPTS = 60; // 3 mins
+
+    const handleSuccess = () => {
+      setShowQrModal(false);
+      if (!isDirectPurchase) {
+        updateLocalCartAfterPayment(checkoutItems.map(i => i._id));
+      }
+      fetchCart(false);
+      toast.success("Payment confirmed! Order placed.");
+      navigate('/payment-success');
+    };
 
     const interval = setInterval(async () => {
       attempts++;
@@ -66,31 +76,34 @@ const Checkout = () => {
         clearInterval(interval);
         setPollingId(null);
         setQrStatus('error');
-        toast.error("Payment timeout. If you paid, check your orders page.");
+        toast.error("Timeout. If you paid, check your orders page.");
         return;
       }
 
       try {
-        // Poll OUR database — webhook updates this when payment succeeds
+        // Step 1: Poll OUR DB — webhook should update this to 'paid'
         const result = await orderAPI.getOrderByPaymentIntent(paymentIntentId);
-
         if (result.status === 'paid') {
           clearInterval(interval);
           setPollingId(null);
-          setShowQrModal(false);
-
-          // Clear cart UI (skip for direct/buy-now)
-          if (!isDirectPurchase) {
-            updateLocalCartAfterPayment(checkoutItems.map(i => i._id));
-          }
-          fetchCart(false);
-
-          toast.success("Payment confirmed! Order placed.");
-          navigate('/payment-success');
+          handleSuccess();
+          return;
         }
-        // status === 'pending' → keep polling, webhook hasn't fired yet
+
+        // Step 2: If still pending after 10s, also check PayMongo directly as fallback
+        if (attempts >= 4) {
+          const { status } = await paymentAPI.checkQrPhStatus(paymentIntentId);
+          if (status === 'succeeded') {
+            clearInterval(interval);
+            setPollingId(null);
+            // Call confirmQrPhOrder to update the pending order in DB
+            orderAPI.confirmQrPhOrder({ paymentIntentId })
+              .then(() => { console.log('✅ Order confirmed via fallback'); })
+              .catch(err => { console.error('❌ Fallback confirm failed:', err.response?.data || err.message); });
+            handleSuccess();
+          }
+        }
       } catch (err) {
-        // 404 means order not found yet (pending order may not exist) — keep polling
         if (err.response?.status !== 404) {
           console.error("Polling error:", err.message);
         }
