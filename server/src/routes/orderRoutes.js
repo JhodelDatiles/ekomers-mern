@@ -6,7 +6,8 @@ import {
   confirmDelivery,
   deleteOrder,
   cancelOrder,
-  confirmQrPhOrder      // ← route handler from orderController
+  confirmQrPhOrder    ,
+  getOrderByPaymentIntent  // ← route handler from orderController
 } from '../controllers/orderController.js';
 import { handlePayMongoWebhook } from '../controllers/webhookController.js'; // ← only the webhook handler
 import { protect } from '../middlewares/protect.js';
@@ -21,6 +22,9 @@ router.post('/confirm-qrph', protect, confirmQrPhOrder);
 
 // 3. Checkout session (GCash, Card, Maya, GrabPay)
 router.post('/checkout-session', protect, initiatePayMongoCheckout);
+
+router.get('/by-intent/:paymentIntentId', protect, getOrderByPaymentIntent);
+
 
 // 4. User orders
 router.get('/', protect, getUserOrders);

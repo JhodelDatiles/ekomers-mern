@@ -484,3 +484,18 @@ export const confirmQrPhOrder = async (req, res) => {
     res.status(500).json({ message: 'Failed to confirm order', error: error.message });
   }
 };
+
+// Poll order status by paymentIntentId — frontend uses this instead of polling PayMongo
+export const getOrderByPaymentIntent = async (req, res) => {
+  try {
+    const { paymentIntentId } = req.params;
+    const order = await Order.findOne({ 
+      paymentIntentId, 
+      userId: req.user.id  // security: only return if it belongs to this user
+    });
+    if (!order) return res.status(404).json({ status: 'pending' });
+    res.status(200).json({ status: order.paymentStatus, orderId: order._id });
+  } catch (error) {
+    res.status(500).json({ message: 'Error checking order status' });
+  }
+};
