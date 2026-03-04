@@ -2,30 +2,35 @@ import { config } from '../envconfig.js';
 import { orderConfirmationEmail, verificationEmailTemplate } from '../utils/emailTemplates.js';
 
 // ─────────────────────────────────────────────────────────────────
-// Resend HTTP API — works on Render free tier (no SMTP port issues)
+// Brevo (formerly Sendinblue) HTTP API
+// Free tier: 300 emails/day, no domain needed, works on Render
 // ─────────────────────────────────────────────────────────────────
 const sendEmail = async ({ to, subject, html, text }) => {
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${config.resendApiKey}`,
+      'api-key': config.brevoApiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: config.emailFrom,
-      to,
+      sender: {
+        name: 'EKOMERS',
+        email: config.emailFrom,
+      },
+      to: [{ email: to }],
       subject,
-      html,
-      text,
+      htmlContent: html,
+      textContent: text,
     }),
   });
 
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.message || `Resend error: ${res.status}`);
+    throw new Error(data.message || `Brevo error: ${res.status}`);
   }
 
+  console.log(`📧 Brevo sent — messageId: ${data.messageId}`);
   return data;
 };
 
@@ -48,12 +53,15 @@ export const sendSecurityCode = async (user, code, type) => {
   try {
     await sendEmail({
       to: user.email,
-      subject: type === 'password' ? 'Password Reset Code' : 'Account Deletion Code',
+      subject: type === 'password' ? 'Password Reset Code — EKOMERS' : 'Account Deletion Code — EKOMERS',
       text: `Your security code is: ${code}. It expires in 10 minutes.`,
       html: `
         <div style="font-family: sans-serif; max-width: 400px; margin: auto; padding: 40px; background: #0a0a0a; color: #fff; border-radius: 16px; text-align: center;">
           <h2 style="font-style: italic; text-transform: uppercase; letter-spacing: -1px;">Security Code</h2>
-          <p style="color: #aaa; font-size: 13px;">Use this code to ${type === 'password' ? 'reset your password' : 'delete your account'}. It expires in <strong>10 minutes</strong>.</p>
+          <p style="color: #aaa; font-size: 13px;">
+            Use this code to ${type === 'password' ? 'reset your password' : 'delete your account'}.
+            It expires in <strong>10 minutes</strong>.
+          </p>
           <div style="font-size: 40px; font-weight: 900; letter-spacing: 8px; color: #fff; background: #1a1a1a; padding: 24px; border-radius: 12px; margin: 24px 0;">
             ${code}
           </div>
@@ -61,7 +69,7 @@ export const sendSecurityCode = async (user, code, type) => {
         </div>
       `,
     });
-    console.log('✅ Security code email sent to:', user.email);
+    console.log('✅ Security code sent to:', user.email);
     return true;
   } catch (error) {
     console.error('❌ Security code email failed:', error.message);
