@@ -16,8 +16,6 @@ const AdminConfiguration = () => {
   const [settings, setSettings] = useState({
     storeName: "",
     storeDescription: "",
-    newsletterTitle: "",
-    newsletterSubtitle: "",
     facebook: "",
     twitter: "",
     instagram: "",
@@ -32,7 +30,6 @@ const AdminConfiguration = () => {
     }
   });
 
-  // Helper to update Favicon globally
   const updateFavicon = (url) => {
     let link = document.querySelector("link[rel~='icon']");
     if (!link) {
@@ -52,8 +49,6 @@ const AdminConfiguration = () => {
           setSettings({
             storeName: data.storeName || "",
             storeDescription: data.storeDescription || "",
-            newsletterTitle: data.newsletterTitle || "",
-            newsletterSubtitle: data.newsletterSubtitle || "",
             facebook: data.socialLinks?.facebook || "",
             twitter: data.socialLinks?.twitter || "",
             instagram: data.socialLinks?.instagram || "",
@@ -83,7 +78,7 @@ const AdminConfiguration = () => {
       setLogoFile(file);
       const previewUrl = URL.createObjectURL(file);
       setLogoPreview(previewUrl);
-      updateFavicon(previewUrl); // Immediate Favicon Preview
+      updateFavicon(previewUrl);
     }
   };
 
@@ -96,29 +91,21 @@ const AdminConfiguration = () => {
       const formData = new FormData();
       formData.append("storeName", settings.storeName);
       formData.append("storeDescription", settings.storeDescription);
-      formData.append("newsletterTitle", settings.newsletterTitle);
-      formData.append("newsletterSubtitle", settings.newsletterSubtitle);
-      
       formData.append("socialLinks", JSON.stringify({
         facebook: settings.facebook,
         twitter: settings.twitter,
         instagram: settings.instagram
       }));
-
       formData.append("officeAddress", JSON.stringify(settings.officeAddress));
       formData.append("paymentMethodsRaw", settings.paymentMethodsRaw);
-
-      if (logoFile) {
-        formData.append("logo", logoFile);
-      }
+      if (logoFile) formData.append("logo", logoFile);
 
       const { data } = await api.put('/settings', formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       
       toast.success("Global Configuration Updated!", { id: tid });
-      document.title = data.storeName; // Sync Title
-      
+      document.title = data.storeName;
       setTimeout(() => window.location.reload(), 1500); 
     } catch (err) {
       console.error("Save Error:", err.response?.data || err.message);
@@ -187,7 +174,7 @@ const AdminConfiguration = () => {
                   value={settings.storeName}
                   onChange={(e) => {
                     setSettings({...settings, storeName: e.target.value});
-                    document.title = e.target.value || "Store Configuration"; // Real-time title change
+                    document.title = e.target.value || "Store Configuration";
                   }}
                 />
               </div>
@@ -207,25 +194,21 @@ const AdminConfiguration = () => {
                   {settings.storeDescription.length} / 250
                 </span>
               </div>
-              <div className="relative">
-                <textarea 
-                  className={`textarea textarea-bordered bg-base-300 border-base-content/10 h-24 font-bold leading-relaxed w-full transition-all text-base-content rounded-2xl
-                    ${settings.storeDescription.length > 250 
-                      ? 'border-error focus:border-error ring-2 ring-error/10' 
-                      : 'focus:border-primary focus:ring-2 focus:ring-primary/50'
-                    }`}
-                  placeholder="Briefly describe your store for SEO..."
-                  value={settings.storeDescription}
-                  onChange={(e) => setSettings({...settings, storeDescription: e.target.value})}
-                />
-              </div>
-              <div className="h-4 mt-1 flex justify-end">
-                {settings.storeDescription.length > 250 && (
-                  <p className="text-[10px] font-black text-error animate-in slide-in-from-top-1 duration-300 uppercase italic">
-                    Once Exceeded 250 characters
-                  </p>
-                )}
-              </div>
+              <textarea 
+                className={`textarea textarea-bordered bg-base-300 border-base-content/10 h-24 font-bold leading-relaxed w-full transition-all text-base-content rounded-2xl
+                  ${settings.storeDescription.length > 250 
+                    ? 'border-error focus:border-error ring-2 ring-error/10' 
+                    : 'focus:border-primary focus:ring-2 focus:ring-primary/50'
+                  }`}
+                placeholder="Briefly describe your store for SEO..."
+                value={settings.storeDescription}
+                onChange={(e) => setSettings({...settings, storeDescription: e.target.value})}
+              />
+              {settings.storeDescription.length > 250 && (
+                <p className="text-[10px] font-black text-error animate-pulse uppercase italic mt-1 text-right">
+                  Exceeded 250 characters
+                </p>
+              )}
             </div>
           </section>
 
@@ -269,33 +252,9 @@ const AdminConfiguration = () => {
             </div>
           </section>
 
-          {/* MARKETING & SOCIAL */}
+          {/* SOCIAL + PAYMENT */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <section className="card bg-base-200 border border-base-content/5 rounded-[28px]">
-              <div className="card-body">
-                <h2 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest opacity-40 mb-2 text-base-content">
-                  <Mail className="w-4 h-4" /> Marketing
-                </h2>
-                <div className="space-y-4">
-                  <FormInput 
-                    label="Newsletter Title"
-                    placeholder="Join the newsletter" 
-                    icon={Mail}
-                    maxLength={40} 
-                    value={settings.newsletterTitle} 
-                    onChange={(e) => setSettings({...settings, newsletterTitle: e.target.value})} 
-                  />
-                  <FormInput 
-                    label="Newsletter Subtitle"
-                    placeholder="Get weekly updates" 
-                    maxLength={80} 
-                    value={settings.newsletterSubtitle} 
-                    onChange={(e) => setSettings({...settings, newsletterSubtitle: e.target.value})} 
-                  />
-                </div>
-              </div>
-            </section>
-
+            {/* SOCIAL LINKS */}
             <section className="card bg-base-200 border border-base-content/5 rounded-[28px]">
               <div className="card-body">
                 <h2 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest opacity-40 mb-2 text-base-content">
@@ -316,14 +275,44 @@ const AdminConfiguration = () => {
                     value={settings.instagram} 
                     onChange={(e) => setSettings({...settings, instagram: e.target.value})} 
                   />
+                  {/* ✅ FIXED: was bound to settings.instagram before */}
                   <FormInput 
-                    label="X URL"
-                    icon={Twitter }
-                    placeholder="https://Twitter.com/yourstore" 
-                    value={settings.instagram} 
-                    onChange={(e) => setSettings({...settings, instagram: e.target.value})} 
+                    label="X (Twitter) URL"
+                    icon={Twitter}
+                    placeholder="https://x.com/yourstore" 
+                    value={settings.twitter} 
+                    onChange={(e) => setSettings({...settings, twitter: e.target.value})} 
                   />
                 </div>
+              </div>
+            </section>
+
+            {/* ✅ ADDED: Payment Methods */}
+            <section className="card bg-base-200 border border-base-content/5 rounded-[28px]">
+              <div className="card-body">
+                <h2 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest opacity-40 mb-2 text-base-content">
+                  <CreditCard className="w-4 h-4" /> Payment Methods
+                </h2>
+                <p className="text-[9px] opacity-40 uppercase font-bold tracking-widest mb-3 text-base-content">
+                  Comma-separated — shown in footer
+                </p>
+                <FormInput
+                  label="Accepted Methods"
+                  icon={CreditCard}
+                  placeholder="VISA, MASTERCARD, GCASH, PAYMONGO"
+                  value={settings.paymentMethodsRaw}
+                  onChange={(e) => setSettings({...settings, paymentMethodsRaw: e.target.value})}
+                />
+                {/* Live preview of parsed methods */}
+                {settings.paymentMethodsRaw && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {settings.paymentMethodsRaw.split(',').map((m, i) => m.trim() && (
+                      <span key={i} className="border border-base-content/20 px-2 py-0.5 rounded bg-base-300 text-[9px] font-black uppercase tracking-tighter text-base-content">
+                        {m.trim().toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -344,11 +333,7 @@ const AdminConfiguration = () => {
               <div className="flex flex-col items-center text-center gap-4 py-4">
                 {logoPreview ? (
                   <div className="relative group">
-                    <img 
-                      src={logoPreview} 
-                      alt="Logo" 
-                      className="w-28 h-28 object-contain bg-white rounded-3xl p-3 shadow-2xl transition-transform group-hover:scale-105" 
-                    />
+                    <img src={logoPreview} alt="Logo" className="w-28 h-28 object-contain bg-white rounded-3xl p-3 shadow-2xl transition-transform group-hover:scale-105" />
                     <div className="absolute -bottom-2 -right-2 bg-primary text-primary-content p-1.5 rounded-full shadow-lg border-4 border-base-200">
                       <ShieldCheck size={16} />
                     </div>
@@ -369,7 +354,7 @@ const AdminConfiguration = () => {
               <div className="space-y-2 px-2">
                 <p className="text-[9px] font-black uppercase opacity-30 tracking-widest">Global SEO Summary</p>
                 <p className="text-xs opacity-70 italic font-medium leading-relaxed line-clamp-4 bg-base-300 p-4 rounded-2xl border border-base-content/5">
-                  "{settings.storeDescription || "Provide a store description to enhance SEO and brand visibility..."}"
+                  "{settings.storeDescription || "Provide a store description to enhance SEO..."}"
                 </p>
               </div>
 
@@ -386,21 +371,36 @@ const AdminConfiguration = () => {
                 </div>
               </div>
 
+              {/* Payment Methods Preview */}
+              {settings.paymentMethodsRaw && (
+                <div className="bg-base-300 p-4 rounded-3xl border border-base-content/5">
+                  <p className="text-[9px] font-black uppercase opacity-30 tracking-widest mb-2">Footer Payment Methods</p>
+                  <div className="flex flex-wrap gap-2">
+                    {settings.paymentMethodsRaw.split(',').map((m, i) => m.trim() && (
+                      <span key={i} className="border border-base-content/20 px-2 py-0.5 rounded bg-base-200 text-[9px] font-black uppercase tracking-tighter">
+                        {m.trim().toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between pt-2 px-2">
                 <div className="flex items-center gap-2">
-                   <div className="w-2 h-2 bg-success rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
-                   <span className="text-[9px] font-black uppercase opacity-40 tracking-widest italic">Database Live</span>
+                  <div className="w-2 h-2 bg-success rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+                  <span className="text-[9px] font-black uppercase opacity-40 tracking-widest italic">Database Live</span>
                 </div>
                 <div className="flex gap-3 opacity-40">
                   {settings.facebook && <Facebook size={14} />}
                   {settings.instagram && <Instagram size={14} />}
+                  {settings.twitter && <Twitter size={14} />}
                 </div>
               </div>
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-[80px] -z-10"></div>
             </div>
             
             <div className="alert bg-primary/10 border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest flex justify-center py-4 rounded-2xl">
-                Changes impact Navbar, Footer & SEO
+              Changes impact Navbar, Footer & SEO
             </div>
           </div>
         </aside>

@@ -28,7 +28,7 @@ const Footer = () => {
 
   return (
     <footer className="bg-base-100 border-t border-base-300 relative z-50">
-      <div className="bg-primary/5 py-12 px-10 border-b border-base-300">
+      {/* <div className="bg-primary/5 py-12 px-10 border-b border-base-300">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="text-center md:text-left">
             <h3 className="text-2xl font-bold mb-2">{settings.newsletterTitle}</h3>
@@ -39,7 +39,7 @@ const Footer = () => {
             <button className="btn btn-primary join-item px-6"><Send className="w-4 h-4 mr-2" /> Subscribe</button>
           </div>
         </div>
-      </div>
+      </div> */}
 
       <div className="footer max-w-7xl mx-auto p-10 text-base-content grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-y-12">
         <div className="col-span-2 lg:col-span-2 pr-0 lg:pr-12">

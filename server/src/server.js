@@ -155,6 +155,8 @@ const startServer = async () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(` Test webhook URL: https://appointed-melida-biserially.ngrok-free.dev/api/orders/webhook`);
       console.log(` Live webhook URL: https://ekomers-mern.onrender.com/api/orders/webhook`);
+      console.log('🔑 BREVO KEY:', process.env.BREVO_API_KEY ? '✅ loaded' : '❌ undefined');
+      console.log('🔑 config.brevoApiKey:', config.brevoApiKey ? '✅ loaded' : '❌ undefined');
     });
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);

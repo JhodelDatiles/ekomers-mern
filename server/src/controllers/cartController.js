@@ -78,23 +78,33 @@ export const updateCartItem = async (req, res) => {
     const updatedCart = await cart.populate('items.productId', 'name images price sizes');
     res.status(200).json(updatedCart);
   } catch (error) {
-    res.status(500).json({ message: "Error updating cart" });
+    console.error('❌ updateCartItem error:', error.message);
+    res.status(500).json({ message: "Error updating cart", error: error.message });
   }
 };
 
 // DELETE /api/cart/:itemId - Remove from cart
 export const removeFromCart = async (req, res) => {
   try {
+    // Step 1: Pull the item atomically — no VersionError
+    await Cart.findOneAndUpdate(
+      { userId: req.user.id },
+      { $pull: { items: { _id: req.params.itemId } } }
+    );
+
+    // Step 2: Fetch fresh cart and recalculate total in one clean save
     const cart = await Cart.findOne({ userId: req.user.id });
-    if (!cart) return res.status(404).json({ message: "Cart not found" });
+    if (!cart) return res.status(200).json({ items: [], totalAmount: 0 });
 
-    cart.items = cart.items.filter(item => item._id.toString() !== req.params.itemId);
     cart.totalAmount = cart.items.reduce((acc, item) => acc + item.quantity * item.price, 0);
-
     await cart.save();
-    res.status(200).json(cart);
+
+    // Step 3: Return populated cart
+    const populated = await cart.populate('items.productId', 'name images price sizes');
+    res.status(200).json(populated);
   } catch (error) {
-    res.status(500).json({ message: "Error removing item" });
+    console.error('❌ removeFromCart error:', error.message);
+    res.status(500).json({ message: "Error removing item", error: error.message });
   }
 };
 
