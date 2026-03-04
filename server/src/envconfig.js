@@ -17,7 +17,10 @@ export const config = {
 
   mongoUri: process.env.MONGO_URI,
   port: process.env.PORT || 5000,
-
-  resendApiKey: process.env.RESEND_API_KEY,
-  emailFrom: process.env.EMAIL_FROM || 'EKOMERS <onboarding@resend.dev>',
+  // Resend
+  // resendApiKey: process.env.RESEND_API_KEY,
+  // emailFrom: process.env.EMAIL_FROM || 'EKOMERS <onboarding@resend.dev>',
+  // Brevo — free email API, no domain needed, works on Render free tier
+  brevoApiKey: process.env.BREVO_API_KEY,
+  emailFrom: process.env.EMAIL_FROM || 'noreply@ekomers.com',
 };
