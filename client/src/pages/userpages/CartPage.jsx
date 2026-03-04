@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import toast from 'react-hot-toast';
 import CartSkeleton from "../../components/skeletons/CartSkeleton";
+import ConfirmationModal from "../../components/modals/ConfirmationModal";
 
 const CartPage = () => {
   const { cart, updateQuantity, removeFromCart, loading: cartLoading } = useCart();
@@ -16,6 +17,7 @@ const CartPage = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [processingId, setProcessingId] = useState(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const cartItems = useMemo(() => cart?.items || [], [cart?.items]);
 
@@ -61,7 +63,6 @@ const CartPage = () => {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm("PURGE SELECTED ITEMS?")) return;
     setIsDeleting(true);
     const deletePromise = Promise.all(selectedIds.map(id => removeFromCart(id)));
     toast.promise(deletePromise, {
@@ -112,7 +113,7 @@ const CartPage = () => {
         {cartItems.length > 0 && (
           <div className="flex items-center gap-6">
             {selectedIds.length > 0 && (
-              <button onClick={handleBulkDelete} disabled={isDeleting} className="btn btn-error btn-outline btn-xs px-4 rounded-xl font-black italic">
+              <button onClick={() => setShowBulkDeleteModal(true)} disabled={isDeleting} className="btn btn-error btn-outline btn-xs px-4 rounded-xl font-black italic">
                 {isDeleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} PURGE ({selectedIds.length})
               </button>
             )}
@@ -199,6 +200,14 @@ const CartPage = () => {
           </div>
         </div>
       )}
+      <ConfirmationModal
+        isOpen={showBulkDeleteModal}
+        title="Purge Selected?"
+        message={`You are about to permanently remove ${selectedIds.length} item(s) from your cart. This cannot be undone.`}
+        loading={isDeleting}
+        onConfirm={async () => { setShowBulkDeleteModal(false); await handleBulkDelete(); }}
+        onCancel={() => setShowBulkDeleteModal(false)}
+      />
     </div>
   );
 };
