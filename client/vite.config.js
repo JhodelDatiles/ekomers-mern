@@ -14,5 +14,5 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
-  }  // ← this was missing
+  }
 })

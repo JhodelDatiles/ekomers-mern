@@ -75,10 +75,7 @@ const Register = () => {
 
       // SUCCESS STATE
       setIsSubmitted(true);
-      toast.success("No  email verification yet! but you can login now!");
-      //uncomment this when you already have your own domain
-      // toast.success("Verification email sent!");
-      // Inside your Register handleSubmit catch block
+      toast.success("Verification email sent! Check your inbox.");
     } catch (error) {
       if (error.response?.status === 409) {
         toast.error("Email already exists. Try logging in!");
