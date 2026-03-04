@@ -1,285 +1,257 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { User, Mail, Lock, CheckCircle, UserPlus } from "lucide-react";
-import toast from "react-hot-toast";
-import { authAPI } from "../services/api.js";
-import Footer from "../components/Footer.jsx";
-// import { useAuth } from "../context/AuthContext.jsx";
+import User from '../models/userSchema.js';
+import { sendVerificationEmail, sendSecurityCode } from '../services/emailService.js';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
 
-const Register = () => {
-  const navigate = useNavigate();
-  // const { login } = useAuth();
-  const [isSubmitted, setIsSubmitted] = useState(false); // New State
+dotenv.config();
 
-  // 1. Form State
-  const [formData, setFormData] = useState({
-    username: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
-
-  // 2. UI & Error States
-  const [loading, setLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
-  const [confirmError, setConfirmError] = useState("");
-
-  // 3. Handle Input Changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-
-    // Clear errors while typing
-    if (name === "password") setPasswordError("");
-    if (name === "confirmPassword") setConfirmError("");
+const getCookieOptions = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  return {
+    httpOnly: true,
+    path: '/',
+    secure: true, 
+    sameSite: 'none', 
   };
-
-  // 4. Validate password on blur
-  const handlePasswordBlur = () => {
-    const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(formData.password)) {
-      setPasswordError("Must be 8+ chars with uppercase & number");
-    }
-  };
-
-  const handleConfirmBlur = () => {
-    if (
-      formData.confirmPassword &&
-      formData.password !== formData.confirmPassword
-    ) {
-      setConfirmError("Passwords do not match");
-    }
-  };
-
-  // 5. Handle form submit
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    // Final validation on submit
-    const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!passwordRegex.test(formData.password)) {
-      toast.error("Password must be 8+ chars with uppercase & number");
-      setLoading(false);
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match!");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await authAPI.register(formData);
-
-      // SUCCESS STATE
-      setIsSubmitted(true);
-      toast.success("No  email verification yet! but you can login now!");
-      //uncomment this when you already have your own domain
-      // toast.success("Verification email sent!");
-      // Inside your Register handleSubmit catch block
-    } catch (error) {
-      if (error.response?.status === 409) {
-        toast.error("Email already exists. Try logging in!");
-      } else {
-        toast.error(error.response?.data?.message || "Registration failed.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-  // If email is sent, show this UI instead of the form
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-base-200 p-4">
-        <div className="max-w-md w-full bg-base-100 p-8 rounded-[40px] shadow-xl text-center border border-primary/10">
-          <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Mail className="w-10 h-10 text-primary animate-bounce" />
-          </div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter">
-            Check Your Inbox
-          </h2>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mt-2 mb-6">
-            We sent a verification link to{" "}
-            <span className="text-primary">{formData.email}</span>
-          </p>
-          <button
-            onClick={() => navigate("/login")}
-            className="btn btn-primary w-full rounded-2xl font-black uppercase italic"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col min-h-screen">
-      <main className="flex-grow relative z-10 overflow-hidden bg-base-200">
-        <div className="min-h-[calc(100vh-80px)] flex justify-center md:justify-end md:pr-20 items-center">
-          <div className="w-full max-w-md bg-base-100 shadow-xl relative z-20 rounded-3xl overflow-hidden">
-            <div className="card-body justify-center py-8">
-              <div className="flex flex-col items-center gap-1 mb-6">
-                <h2 className="card-title text-3xl font-black uppercase italic tracking-tighter text-base-content">
-                  Sign Up
-                </h2>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 text-base-content">
-                  Create your identity
-                </p>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* USERNAME */}
-                <div className="form-control">
-                  <div className="flex justify-between items-end mb-1">
-                    <label
-                      className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 text-base-content"
-                      htmlFor="username"
-                    >
-                      <User className="w-4 h-4 text-primary" /> Username
-                    </label>
-                    <span
-                      className={`text-[10px] font-bold transition-all duration-300 ${
-                        formData.username.length >= 20
-                          ? "text-error animate-pulse"
-                          : "opacity-30 text-base-content"
-                      }`}
-                    >
-                      {formData.username.length} / 20
-                    </span>
-                  </div>
-
-                  <div className="relative">
-                    <input
-                      id="username"
-                      type="text"
-                      name="username"
-                      maxLength={20} // Physical limit
-                      placeholder="Choose a username"
-                      className={`input input-bordered w-full bg-base-200 font-bold text-base-content transition-all rounded-2xl
-        ${
-          formData.username.length >= 20
-            ? "border-error focus:border-error ring-2 ring-error/10"
-            : "border-base-content/10 focus:border-primary"
-        }`}
-                      value={formData.username}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="h-4 mt-1">
-                    {formData.username.length >= 20 && (
-                      <p className="text-[10px] font-black text-error animate-in slide-in-from-top-1 duration-300 uppercase italic tracking-tight text-right">
-                        Once Exceeded 20 characters
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* EMAIL */}
-                <div className="form-control">
-                  <label className="label" htmlFor="email">
-                    <span className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 text-base-content">
-                      <Mail className="w-4 h-4 text-primary" /> Email
-                    </span>
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    name="email"
-                    placeholder="Enter your email"
-                    className="input input-bordered w-full bg-base-200 border-base-content/10 font-bold text-base-content focus:border-primary transition-all rounded-2xl"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                {/* PASSWORD */}
-                <div className="form-control">
-                  <label className="label" htmlFor="password">
-                    <span className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 text-base-content">
-                      <Lock className="w-4 h-4 text-primary" /> Password
-                    </span>
-                  </label>
-                  <input
-                    id="password"
-                    type="password"
-                    name="password"
-                    placeholder="Enter your password"
-                    className={`input input-bordered w-full bg-base-200 font-bold text-base-content focus:border-primary transition-all rounded-2xl ${passwordError ? "border-error" : "border-base-content/10"}`}
-                    value={formData.password}
-                    onChange={handleChange}
-                    onBlur={handlePasswordBlur}
-                    required
-                  />
-                  {passwordError && (
-                    <p className="text-error text-[10px] font-black uppercase italic mt-1 animate-pulse">
-                      {passwordError}
-                    </p>
-                  )}
-                </div>
-
-                {/* CONFIRM PASSWORD */}
-                <div className="form-control">
-                  <label className="label" htmlFor="confirmPassword">
-                    <span className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 text-base-content">
-                      <CheckCircle className="w-4 h-4 text-primary" /> Confirm
-                      Password
-                    </span>
-                  </label>
-                  <input
-                    id="confirmPassword"
-                    type="password"
-                    name="confirmPassword"
-                    placeholder="Re-enter password"
-                    className={`input input-bordered w-full bg-base-200 font-bold text-base-content focus:border-primary transition-all rounded-2xl ${confirmError ? "border-error" : "border-base-content/10"}`}
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    onBlur={handleConfirmBlur}
-                    required
-                  />
-                  {confirmError && (
-                    <p className="text-error text-[10px] font-black uppercase italic mt-1 animate-pulse">
-                      {confirmError}
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn btn-primary w-full mt-4 font-black uppercase italic tracking-widest rounded-2xl shadow-lg shadow-primary/20"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <span className="loading loading-spinner"></span>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4" /> Sign Up
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="divider text-[10px] font-black text-base-content/30 uppercase tracking-[0.3em]">
-                OR
-              </div>
-              <Link
-                to="/login"
-                className="btn btn-outline btn-block rounded-2xl font-black uppercase tracking-widest text-[10px] border-base-content/20 hover:bg-base-content hover:text-base-100"
-              >
-                Login
-              </Link>
-            </div>
-          </div>
-        </div>
-      </main>
-      <Footer />
-    </div>
-  );
 };
 
-export default Register;
+const setTokenCookies = (res, user) => {
+  const accessToken = jwt.sign(
+    { id: user._id, role: user.role }, 
+    process.env.ACCESS_SECRET, 
+    { expiresIn: '15m' } 
+  );
+  
+  const refreshToken = jwt.sign(
+    { id: user._id }, 
+    process.env.REFRESH_SECRET, 
+    { expiresIn: '7d' }
+  );
+
+  const cookieOptions = getCookieOptions();
+
+  res.cookie('accessToken', accessToken, {
+    ...cookieOptions,
+    maxAge: 15 * 60 * 1000, 
+  });
+
+  res.cookie('refreshToken', refreshToken, {
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000, 
+  });
+};
+
+export const register = async (req, res) => {
+  try {
+    const { email, password, username } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(409).json({ message: "User already exists" });
+
+    const token = crypto.randomBytes(32).toString('hex');
+
+    const user = await User.create({ 
+      email, 
+      password, 
+      username, 
+      isVerified: false,
+      verificationToken: token
+    });
+
+    // Send verification email (non-blocking — user is created regardless)
+    try {
+      await sendVerificationEmail(user);
+    } catch (emailErr) {
+      console.error("❌ Email Service Failed:", emailErr.message);
+    }
+
+    res.status(201).json({ 
+      message: "Registration successful! Please check your email to verify." 
+    });
+
+  } catch (error) {
+    console.error("🔥 Global Register Error:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const user = await User.findOne({ verificationToken: token });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired verification token." });
+    }
+
+    user.isVerified = true;
+    user.verificationToken = undefined; // Clear the token once used
+    await user.save();
+
+    res.status(200).json({ message: "Email verified successfully! You can now login." });
+  } catch (error) {
+    res.status(500).json({ message: "Verification failed", error: error.message });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Generate 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    user.verificationCode = code;
+    user.codeExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
+
+    await sendSecurityCode(user, code, 'password');
+
+    res.json({ message: "Security code sent to your email!" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    const user = await User.findOne({ 
+      email: email.toLowerCase(),
+      verificationCode: code,
+      codeExpires: { $gt: Date.now() }
+    });
+
+    if (!user) return res.status(400).json({ message: "Invalid or expired code" });
+
+    // Hash new password
+    // const salt = await bcrypt.genSalt(10);
+    // user.password = await bcrypt.hash(newPassword, salt);
+    
+    // Clear security fields
+    user.password = newPassword;
+    user.verificationCode = undefined;
+    user.codeExpires = undefined;
+    await user.save();
+
+    res.json({ message: "Password updated successfully!" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const resendVerification = async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email: email.toLowerCase() });
+
+  if (!user) return res.status(404).json({ message: "User not found" });
+  if (user.isVerified) return res.status(400).json({ message: "Already verified" });
+
+  // Use verificationToken to match your verifyEmail function
+  const newToken = crypto.randomBytes(32).toString('hex');
+  user.verificationToken = newToken; 
+  await user.save();
+
+  await sendVerificationEmail(user);
+
+  res.status(200).json({ message: "Verification email sent!" });
+};
+
+export const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+    console.log("User found:", !!user);
+    if (user) {
+      const isMatch = await bcrypt.compare(password, user.password);
+      console.log("Password Match:", isMatch);
+    }
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ message: "Invalid credentials!" });
+    }
+    // Block unverified users from logging in
+    if (!user.isVerified) {
+      return res.status(403).json({ 
+        message: "Please verify your email address before logging in.",
+        needsVerification: true
+      });
+    }
+    setTokenCookies(res, user);
+
+    // 🚀 NEW FEATURE: Fetch full user profile to include addresses for instant UI sync
+    const fullUser = await User.findById(user._id).select('-password');
+
+    res.json({
+      message: "Login successful",
+      user: fullUser // Sending fullUser instead of partial data
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  const token = req.cookies.refreshToken;
+  if (!token) return res.status(401).json({ message: "Session expired" });
+
+  try {
+    const decoded = jwt.verify(token, process.env.REFRESH_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    const accessToken = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.ACCESS_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    const cookieOptions = getCookieOptions();
+
+    res.cookie('accessToken', accessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000,
+    });
+
+    const newRefreshToken = jwt.sign(
+      { id: user._id },
+      process.env.REFRESH_SECRET,
+      { expiresIn: '7d' }
+    );
+    res.cookie('refreshToken', newRefreshToken, {
+      ...cookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    // 🚀 NEW FEATURE: Send the full user back so the Interceptor can broadcast it
+    const fullUser = await User.findById(user._id).select('-password');
+    res.status(200).json({ 
+      message: "Token refreshed",
+      user: fullUser 
+    });
+
+  } catch (err) {
+    res.status(401).json({ message: "Invalid refresh token" });
+  }
+};
+
+export const logout = (req, res) => {
+  const options = getCookieOptions();
+  res.clearCookie('accessToken', options);
+  res.clearCookie('refreshToken', options);
+  res.status(200).json({ message: 'Logged out' });
+};
+
+export const getCurrentUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    res.json({ user });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};

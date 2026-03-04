@@ -44,8 +44,8 @@ const Login = () => {
     } catch (error) {
       const message = error.response?.data?.message || "Login failed. Please try again.";
       toast.error(message);
-      // Check if the error is specifically about verification
-      if (message.toLowerCase().includes("verify")) {
+      // Use the needsVerification flag from backend — more reliable than string matching
+      if (error.response?.data?.needsVerification) {
         setShowResend(true);
       }
     } finally {

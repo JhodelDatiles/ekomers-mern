@@ -2,7 +2,6 @@ import User from '../models/userSchema.js';
 import { sendVerificationEmail, sendSecurityCode } from '../services/emailService.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 
@@ -58,16 +57,15 @@ export const register = async (req, res) => {
       email, 
       password, 
       username, 
-      isVerified: true  // ← auto-verify user after registtration for now
-      // verificationToken: token 
+      isVerified: false,
+      verificationToken: token
     });
 
-    // 🚀 WRAP EMAIL IN A TRY-CATCH
+    // Send verification email (non-blocking — user is created regardless)
     try {
       await sendVerificationEmail(user);
     } catch (emailErr) {
       console.error("❌ Email Service Failed:", emailErr.message);
-      // We don't return 500 here because the user WAS created successfully.
     }
 
     res.status(201).json({ 
@@ -132,11 +130,7 @@ export const resetPassword = async (req, res) => {
 
     if (!user) return res.status(400).json({ message: "Invalid or expired code" });
 
-    // Hash new password
-    // const salt = await bcrypt.genSalt(10);
-    // user.password = await bcrypt.hash(newPassword, salt);
-    
-    // Clear security fields
+    // Set plain text — userSchema.pre('save') hashes it automatically
     user.password = newPassword;
     user.verificationCode = undefined;
     user.codeExpires = undefined;
@@ -177,12 +171,13 @@ export const login = async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: "Invalid credentials!" });
     }
-    // 🛑 CHECK VERIFICATION STATUS Uncomment this once you have a domain name
-    // if (!user.isVerified) {
-    //   return res.status(403).json({ 
-    //     message: "Please verify your email address before logging in." 
-    //   });
-    // }
+    // Block unverified users from logging in
+    if (!user.isVerified) {
+      return res.status(403).json({ 
+        message: "Please verify your email address before logging in.",
+        needsVerification: true
+      });
+    }
     setTokenCookies(res, user);
 
     // 🚀 NEW FEATURE: Fetch full user profile to include addresses for instant UI sync
