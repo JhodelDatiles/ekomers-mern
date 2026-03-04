@@ -267,6 +267,10 @@ export const orderAPI = {
     const response = await api.delete(`/orders/${orderId}`);
     return response.data;
   },
+  getOrderByPaymentIntent: async (paymentIntentId) => {
+    const response = await api.get(`/orders/by-intent/${paymentIntentId}`);
+    return response.data;
+  },
 };
 
 // Admin API

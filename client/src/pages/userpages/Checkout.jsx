@@ -57,56 +57,47 @@ const Checkout = () => {
   // 3. Only navigate AFTER order is confirmed saved
   // ─────────────────────────────────────────────────────────────────
   const startPollingIntent = useCallback((paymentIntentId) => {
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60; // 3 mins (60 × 3s)
+
     const interval = setInterval(async () => {
+      attempts++;
+      if (attempts > MAX_ATTEMPTS) {
+        clearInterval(interval);
+        setPollingId(null);
+        setQrStatus('error');
+        toast.error("Payment timeout. If you paid, check your orders page.");
+        return;
+      }
+
       try {
-        const { status } = await paymentAPI.checkQrPhStatus(paymentIntentId);
-        
-        if (status === 'succeeded') {
+        // Poll OUR database — webhook updates this when payment succeeds
+        const result = await orderAPI.getOrderByPaymentIntent(paymentIntentId);
+
+        if (result.status === 'paid') {
           clearInterval(interval);
           setPollingId(null);
-          setQrStatus('saving');
+          setShowQrModal(false);
 
-          const addr = activeAddressRef.current;
-
-          try {
-            // Backend verifies with PayMongo + confirms the pending order
-            // No frontend data sent — backend uses server-saved pending order
-            await orderAPI.confirmQrPhOrder({ paymentIntentId });
-
-            setQrStatus('done');
-
-            // Clear cart UI + sync with DB (skip for direct/buy-now)
-            if (!isDirectPurchase) {
-              updateLocalCartAfterPayment(checkoutItems.map(i => i._id));
-            }
-            fetchCart(false);
-
-            toast.success("Payment confirmed! Order placed.");
-
-            // Small delay so user sees the success state
-            setTimeout(() => navigate('/payment-success'), 800);
-
-          } catch (saveErr) {
-            const errMsg = saveErr.response?.data?.message || saveErr.message || 'Unknown error';
-            const errStatus = saveErr.response?.status;
-            console.error(`❌ Order confirm failed [${errStatus}]:`, errMsg, saveErr.response?.data);
-            
-            // If 2xx but order missing, still navigate — payment was real
-            if (errStatus >= 200 && errStatus < 300) {
-              toast.success("Payment confirmed!");
-              setTimeout(() => navigate('/payment-success'), 800);
-            } else {
-              setQrStatus('error');
-              toast.error(`Order error: ${errMsg}`);
-            }
+          // Clear cart UI (skip for direct/buy-now)
+          if (!isDirectPurchase) {
+            updateLocalCartAfterPayment(checkoutItems.map(i => i._id));
           }
+          fetchCart(false);
+
+          toast.success("Payment confirmed! Order placed.");
+          navigate('/payment-success');
         }
+        // status === 'pending' → keep polling, webhook hasn't fired yet
       } catch (err) {
-        console.error("Polling error", err);
+        // 404 means order not found yet (pending order may not exist) — keep polling
+        if (err.response?.status !== 404) {
+          console.error("Polling error:", err.message);
+        }
       }
     }, 3000);
     setPollingId(interval);
-  }, [checkoutItems, checkoutTotal, navigate, updateLocalCartAfterPayment, fetchCart]);
+  }, [checkoutItems, isDirectPurchase, navigate, updateLocalCartAfterPayment, fetchCart]);
 
   const handleQrPhPayment = async () => {
     if (!activeAddress) return toast.error("No shipping address selected.");
