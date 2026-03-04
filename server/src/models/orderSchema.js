@@ -59,7 +59,8 @@ const orderSchema = new mongoose.Schema(
     waybillId: { 
       type: String, 
       default: () => `WB-${Math.random().toString(36).substr(2, 9).toUpperCase()}` 
-    }
+    },
+    isDirectPurchase: { type: Boolean, default: false }
   },
   { timestamps: true }
 );

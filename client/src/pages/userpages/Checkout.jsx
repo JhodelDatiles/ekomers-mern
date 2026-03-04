@@ -18,6 +18,9 @@ const Checkout = () => {
 
   const checkoutItems = useMemo(() => location.state?.items || [], [location.state?.items]);
   const checkoutTotal = location.state?.total || 0;
+  const isDirectPurchase = location.state?.isDirectPurchase || false;
+  // For direct/buy-now: extract single item details for QR PH
+  const directItem = isDirectPurchase ? checkoutItems[0] : null;
   
   const [loading, setLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false); 
@@ -72,8 +75,10 @@ const Checkout = () => {
 
             setQrStatus('done');
 
-            // Clear cart UI + sync with DB
-            updateLocalCartAfterPayment(checkoutItems.map(i => i._id));
+            // Clear cart UI + sync with DB (skip for direct/buy-now)
+            if (!isDirectPurchase) {
+              updateLocalCartAfterPayment(checkoutItems.map(i => i._id));
+            }
             fetchCart(false);
 
             toast.success("Payment confirmed! Order placed.");
@@ -102,15 +107,17 @@ const Checkout = () => {
     const toastId = toast.loading("Generating QR Code...");
     try {
       const result = await paymentAPI.createQrPhPayment({
-        amount: checkoutTotal,
-        items: checkoutItems,
         shippingInfo: {
-          fullName: activeAddress.fullName,
-          address: activeAddress.address || activeAddress.street,
-          city: activeAddress.city,
-          postalCode: activeAddress.postalCode,
-          contactNumber: activeAddress.contactNumber,
-        }
+          fullName: activeAddress?.fullName,
+          address: activeAddress?.address || activeAddress?.street,
+          city: activeAddress?.city,
+          postalCode: activeAddress?.postalCode,
+          contactNumber: activeAddress?.contactNumber,
+        },
+        isDirectPurchase: isDirectPurchase || undefined,
+        directProductId: directItem ? (directItem.productId?._id || directItem.productId) : undefined,
+        directQuantity: directItem?.quantity,
+        directSize: directItem?.size,
       });
 
       if (!result.qrImage) {

@@ -224,29 +224,64 @@ export const createEWalletSource = async (req, res) => {
 
 export const createQrPhPayment = async (req, res) => {
   try {
-    const { shippingInfo } = req.body;
+    const { shippingInfo, isDirectPurchase, directProductId, directQuantity, directSize } = req.body;
     const userId = req.user.id;
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
 
-    // SECURITY: Load cart from DB — never trust frontend for prices
-    const cart = await Cart.findOne({ userId }).populate('items.productId');
-    if (!cart || cart.items.length === 0) {
-      return res.status(400).json({ message: 'Cart is empty' });
+    let orderItems;
+    let serverTotal;
+
+    if (isDirectPurchase) {
+      // ── DIRECT / BUY NOW ──
+      // Validate inputs exist
+      if (!directProductId || !directSize || !directQuantity) {
+        return res.status(400).json({ message: 'Missing direct purchase details' });
+      }
+
+      // Load product from DB — verify price and stock server-side
+      const product = await Product.findById(directProductId);
+      if (!product) return res.status(404).json({ message: 'Product not found' });
+
+      const sizeData = product.sizes?.find(s => s.size === directSize);
+      if (!sizeData || sizeData.stock < directQuantity) {
+        return res.status(400).json({ message: 'Insufficient stock for selected size' });
+      }
+
+      const serverPrice = sizeData.price; // ← price from DB, never frontend
+      serverTotal = serverPrice * directQuantity;
+
+      orderItems = [{
+        productId: product._id,
+        name: product.name,
+        price: serverPrice,
+        quantity: directQuantity,
+        size: directSize,
+        image: product.images?.[0]?.url
+      }];
+
+    } else {
+      // ── CART CHECKOUT ──
+      // SECURITY: Load cart from DB — never trust frontend for prices
+      const cart = await Cart.findOne({ userId }).populate('items.productId');
+      if (!cart || cart.items.length === 0) {
+        return res.status(400).json({ message: 'Cart is empty' });
+      }
+
+      serverTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+      orderItems = cart.items.map(item => ({
+        productId: item.productId._id,
+        name: item.productId.name,
+        price: item.price,
+        quantity: item.quantity,
+        size: item.size || 'N/A',
+        image: item.productId?.images?.[0]?.url,
+        cartItemId: String(item._id)
+      }));
     }
 
-    const serverTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const amountInCentavos = Math.round(serverTotal * 100);
-
-    const orderItems = cart.items.map(item => ({
-      productId: item.productId._id,
-      name: item.productId.name,
-      price: item.price,
-      quantity: item.quantity,
-      size: item.size || 'N/A',
-      image: item.productId?.images?.[0]?.url,
-      cartItemId: String(item._id)
-    }));
 
     // Step 1: Create Payment Intent with server-calculated amount
     const intentRes = await axios.post('https://api.paymongo.com/v1/payment_intents', {
@@ -291,7 +326,8 @@ export const createQrPhPayment = async (req, res) => {
       shippingInfo,
       paymentMethod: 'qrph',
       paymentStatus: 'pending',
-      status: 'Pending'
+      status: 'Pending',
+      isDirectPurchase: !!isDirectPurchase
     });
 
     console.log(`✅ QR PH pending order created: ${paymentIntentId}`);
