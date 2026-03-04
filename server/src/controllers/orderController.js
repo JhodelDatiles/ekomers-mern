@@ -388,40 +388,58 @@ export const confirmQrPhOrder = async (req, res) => {
       return res.status(400).json({ message: 'paymentIntentId required' });
     }
 
-    // 1. Find the pending order saved during QR creation
-    const pendingOrder = await Order.findOne({ paymentIntentId });
-    if (!pendingOrder) {
-      return res.status(404).json({ message: 'Order not found for this payment intent' });
-    }
-
-    // 2. Verify order belongs to this user — prevent ID hijacking
-    if (String(pendingOrder.userId) !== String(userId)) {
-      console.error('🚨 userId mismatch on confirmQrPhOrder — possible fraud');
-      return res.status(403).json({ message: 'Unauthorized' });
-    }
-
-    // 3. Already confirmed (webhook may have fired first)
-    if (pendingOrder.paymentStatus === 'paid') {
-      return res.status(200).json({ order: pendingOrder, alreadyConfirmed: true });
-    }
-
-    // 4. Verify payment actually succeeded with PayMongo (server-to-server)
+    // 1. ALWAYS verify payment with PayMongo first (server-to-server)
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
     const intentRes = await axios.get(
       `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}`,
       { headers: { authorization: authHeader } }
     );
-
     const piStatus = intentRes.data.data.attributes.status;
+    const piMetadata = intentRes.data.data.attributes.metadata;
+
+    console.log(`🔍 Intent ${paymentIntentId} status: ${piStatus}`);
+
     if (piStatus !== 'succeeded') {
       return res.status(400).json({ message: `Payment not confirmed. Status: ${piStatus}` });
     }
 
-    // 5. Update the pending order to paid
-    pendingOrder.paymentStatus = 'paid';
-    pendingOrder.status = 'Order in Progress';
-    await pendingOrder.save();
+    // 2. Verify the payment intent belongs to this user
+    if (piMetadata?.userId && String(piMetadata.userId) !== String(userId)) {
+      console.error('🚨 userId mismatch — possible fraud');
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // 3. Find pending order (may not exist if createQrPhPayment failed to save it)
+    let pendingOrder = await Order.findOne({ paymentIntentId });
+
+    if (pendingOrder) {
+      // Verify ownership
+      if (String(pendingOrder.userId) !== String(userId)) {
+        console.error('🚨 userId mismatch on pending order — possible fraud');
+        return res.status(403).json({ message: 'Unauthorized' });
+      }
+      // Already confirmed — webhook fired first, we're done
+      if (pendingOrder.paymentStatus === 'paid') {
+        console.log(`✅ Order already confirmed (webhook was first): ${pendingOrder._id}`);
+        return res.status(200).json({ order: pendingOrder, alreadyConfirmed: true });
+      }
+      // Update to paid
+      pendingOrder.paymentStatus = 'paid';
+      pendingOrder.status = 'Order in Progress';
+      await pendingOrder.save();
+    } else {
+      // Pending order was never created (createQrPhPayment failed to save)
+      // Check if webhook already created a paid order
+      console.warn(`⚠️ No pending order found for ${paymentIntentId} — checking for webhook-created order`);
+      const webhookOrder = await Order.findOne({ paymentIntentId });
+      if (webhookOrder) {
+        return res.status(200).json({ order: webhookOrder, alreadyConfirmed: true });
+      }
+      // Last resort: return success anyway since payment is confirmed
+      console.error(`❌ No order found for ${paymentIntentId} but payment succeeded`);
+      return res.status(200).json({ message: 'Payment confirmed but order record missing. Please contact support.', alreadyConfirmed: true });
+    }
 
     // 6. Deduct stock
     for (const item of pendingOrder.items) {

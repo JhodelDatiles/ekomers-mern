@@ -87,11 +87,18 @@ const Checkout = () => {
             setTimeout(() => navigate('/payment-success'), 800);
 
           } catch (saveErr) {
-            console.error("❌ Order save failed:", saveErr.message);
-            setQrStatus('error');
-            // Don't navigate — show error in modal so user knows to contact support
-            // Payment DID succeed, order just failed to save
-            toast.error("Payment received but order failed to save. Please contact support.");
+            const errMsg = saveErr.response?.data?.message || saveErr.message || 'Unknown error';
+            const errStatus = saveErr.response?.status;
+            console.error(`❌ Order confirm failed [${errStatus}]:`, errMsg, saveErr.response?.data);
+            
+            // If 2xx but order missing, still navigate — payment was real
+            if (errStatus >= 200 && errStatus < 300) {
+              toast.success("Payment confirmed!");
+              setTimeout(() => navigate('/payment-success'), 800);
+            } else {
+              setQrStatus('error');
+              toast.error(`Order error: ${errMsg}`);
+            }
           }
         }
       } catch (err) {
