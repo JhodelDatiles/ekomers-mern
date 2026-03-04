@@ -433,18 +433,20 @@ export const confirmQrPhOrder = async (req, res) => {
       }
     }
 
-    // 7. Remove purchased items from cart in DB
-    const cart = await Cart.findOne({ userId });
-    if (cart) {
-      const remainingItems = cart.items.filter(cartItem =>
-        !pendingOrder.items.some(o => String(o.productId) === String(cartItem.productId) && o.size === cartItem.size)
-      );
-      if (remainingItems.length === 0) {
-        await Cart.findOneAndDelete({ userId });
-      } else {
-        cart.items = remainingItems;
-        cart.totalAmount = remainingItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-        await cart.save();
+    // 7. Remove purchased items from cart in DB (skip for direct/buy-now purchases)
+    if (!pendingOrder.isDirectPurchase) {
+      const cart = await Cart.findOne({ userId });
+      if (cart) {
+        const remainingItems = cart.items.filter(cartItem =>
+          !pendingOrder.items.some(o => String(o.productId) === String(cartItem.productId) && o.size === cartItem.size)
+        );
+        if (remainingItems.length === 0) {
+          await Cart.findOneAndDelete({ userId });
+        } else {
+          cart.items = remainingItems;
+          cart.totalAmount = remainingItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+          await cart.save();
+        }
       }
     }
 
