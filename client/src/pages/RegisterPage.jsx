@@ -4,12 +4,10 @@ import { User, Mail, Lock, CheckCircle, UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
 import { authAPI } from "../services/api.js";
 import Footer from "../components/Footer.jsx";
-// import { useAuth } from "../context/AuthContext.jsx";
 
 const Register = () => {
   const navigate = useNavigate();
-  // const { login } = useAuth();
-  const [isSubmitted, setIsSubmitted] = useState(false); // New State
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   // 1. Form State
   const [formData, setFormData] = useState({
@@ -24,24 +22,28 @@ const Register = () => {
   const [passwordError, setPasswordError] = useState("");
   const [confirmError, setConfirmError] = useState("");
 
-  // 3. Handle Input Changes
+  // 3. Store inputs on input fields in an js object and only update data that is changed.
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+       ...prev,
+      [name]: value
+     }));
 
     // Clear errors while typing
     if (name === "password") setPasswordError("");
     if (name === "confirmPassword") setConfirmError("");
   };
-
-  // 4. Validate password on blur
+  
+  // PASSWORD & CONFIRM PASSWORD INLINE ERRORS
+  // 4. Password checker on blur
   const handlePasswordBlur = () => {
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
     if (!passwordRegex.test(formData.password)) {
       setPasswordError("Must be 8+ chars with uppercase & number");
     }
   };
-
+  // 4.1. Confirm password checker on blur
   const handleConfirmBlur = () => {
     if (
       formData.confirmPassword &&
@@ -56,14 +58,15 @@ const Register = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Final validation on submit
+    // PASSWORD & CONFIRM PASSWORD TOAST
+    // Final validation on submit, good for UI/UX for instant visualizaton
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
     if (!passwordRegex.test(formData.password)) {
       toast.error("Password must be 8+ chars with uppercase & number");
       setLoading(false);
       return;
     }
-
+    // Visual for confirm password
     if (formData.password !== formData.confirmPassword) {
       toast.error("Passwords do not match!");
       setLoading(false);
@@ -72,8 +75,6 @@ const Register = () => {
 
     try {
       const response = await authAPI.register(formData);
-
-      // SUCCESS STATE
       setIsSubmitted(true);
       toast.success("Verification email sent! Check your inbox.");
     } catch (error) {
@@ -86,7 +87,8 @@ const Register = () => {
       setLoading(false);
     }
   };
-  // If email is sent, show this UI instead of the form
+
+  // If email is not verified, show this UI instead after registering
   if (isSubmitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base-200 p-4">
@@ -114,10 +116,11 @@ const Register = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <main className="flex-grow relative z-10 overflow-hidden bg-base-200">
+      <main className="grow relative z-10 overflow-hidden bg-base-200">
         <div className="min-h-[calc(100vh-80px)] flex justify-center md:justify-end md:pr-20 items-center">
           <div className="w-full max-w-md bg-base-100 shadow-xl relative z-20 rounded-3xl overflow-hidden">
             <div className="card-body justify-center py-8">
+              {/* TITLE */}
               <div className="flex flex-col items-center gap-1 mb-6">
                 <h2 className="card-title text-3xl font-black uppercase italic tracking-tighter text-base-content">
                   Sign Up
@@ -156,11 +159,11 @@ const Register = () => {
                       maxLength={20} // Physical limit
                       placeholder="Choose a username"
                       className={`input input-bordered w-full bg-base-200 font-bold text-base-content transition-all rounded-2xl
-        ${
-          formData.username.length >= 20
-            ? "border-error focus:border-error ring-2 ring-error/10"
-            : "border-base-content/10 focus:border-primary"
-        }`}
+                      ${
+                        formData.username.length >= 20
+                          ? "border-error focus:border-error ring-2 ring-error/10"
+                          : "border-base-content/10 focus:border-primary"
+                      }`}
                       value={formData.username}
                       onChange={handleChange}
                       required
@@ -246,6 +249,7 @@ const Register = () => {
                   )}
                 </div>
 
+                {/* BUTTON */}
                 <button
                   type="submit"
                   className="btn btn-primary w-full mt-4 font-black uppercase italic tracking-widest rounded-2xl shadow-lg shadow-primary/20"
@@ -261,9 +265,11 @@ const Register = () => {
                 </button>
               </form>
 
+              
               <div className="divider text-[10px] font-black text-base-content/30 uppercase tracking-[0.3em]">
                 OR
               </div>
+              {/* LINK TO LOGIN */}
               <Link
                 to="/login"
                 className="btn btn-outline btn-block rounded-2xl font-black uppercase tracking-widest text-[10px] border-base-content/20 hover:bg-base-content hover:text-base-100"

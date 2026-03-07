@@ -19,6 +19,7 @@ const Login = () => {
 
   const [loading, setLoading] = useState(false);
 
+  //Store inputs on input fields as an js object and only update data that is changed.
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -27,14 +28,15 @@ const Login = () => {
     }));
   };
 
+  // Hanldes the submitted data
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setShowResend(false); // Reset on new attempt
+    setShowResend(false);
     try {
-      //goes to server check the user credentials 
+      // Goes to server check the user credentials
       const response = await authAPI.login(formData);
-      //if user exist return the following:
+      // If user exist return the following:
       if (response.user) {
         login(response.user);
         localStorage.setItem("user", JSON.stringify(response.user));
@@ -42,8 +44,7 @@ const Login = () => {
         toast.success(`Welcome back, ${response.user.username}!`);
       }
     } catch (error) {
-      const message = error.response?.data?.message || "Login failed. Please try again.";
-      toast.error(message);
+      toast.error(error.response?.data?.message || "Login failed. Please try again.");
       // Use the needsVerification flag from backend — more reliable than string matching
       if (error.response?.data?.needsVerification) {
         setShowResend(true);
@@ -52,6 +53,8 @@ const Login = () => {
       setLoading(false);
     }
   };
+
+  // As the name suggest this function handles the resend verification button
   const handleResend = async () => {
     try {
       await authAPI.resendVerification(formData.email);
@@ -63,20 +66,26 @@ const Login = () => {
   };
 
   return (
-<div className="flex flex-col min-h-screen">
-      <div className="flex-grow min-h-[calc(100vh-80px)] flex items-center justify-center md:justify-end md:pr-20 bg-base-200 px-4">
+    <div className="flex flex-col min-h-screen">
+      <div className="grow min-h-[calc(100vh-80px)] flex items-center justify-center md:justify-end md:pr-20 bg-base-200 px-4">
         <div className="card w-full max-w-md bg-base-100 shadow-xl rounded-3xl overflow-hidden">
           <div className="card-body w-full py-8">
             <div className="flex flex-col items-center gap-1 mb-6">
-              <h2 className="card-title text-3xl font-black uppercase italic tracking-tighter text-base-content">Login</h2>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 text-base-content">Welcome Back</p>
+              <h2 className="card-title text-3xl font-black uppercase italic tracking-tighter text-base-content">
+                Login
+              </h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 text-base-content">
+                Welcome Back
+              </p>
             </div>
 
-             {/* ALERT BOX FOR UNVERIFIED USERS */}
+            {/* ALERT BOX FOR UNVERIFIED USERS */}
             {showResend && (
               <div className="bg-error/10 border border-error/20 p-4 rounded-2xl mb-4 flex flex-col items-center gap-2 animate-in fade-in slide-in-from-top-2">
-                <p className="text-[10px] font-black uppercase text-error text-center">Account not verified</p>
-                <button 
+                <p className="text-[10px] font-black uppercase text-error text-center">
+                  Account not verified
+                </p>
+                <button
                   onClick={handleResend}
                   className="text-[9px] font-black uppercase tracking-widest bg-error text-white px-4 py-2 rounded-xl hover:opacity-80 transition-all"
                 >
@@ -122,15 +131,35 @@ const Login = () => {
                   required
                 />
               </div>
-              <Link to="/forgot-password" className="text-[10px] uppercase font-black opacity-40 hover:opacity-100 transition-all">Forgot Password?</Link>
+              <Link
+                to="/forgot-password"
+                className="text-[10px] uppercase font-black opacity-40 hover:opacity-100 transition-all"
+              >
+                Forgot Password?
+              </Link>
 
-              <button type="submit" className="btn btn-primary w-full mt-4 font-black uppercase italic tracking-widest rounded-2xl shadow-lg shadow-primary/20" disabled={loading}>
-                {loading ? <span className="loading loading-spinner"></span> : <><LogIn className="w-4 h-4" /> Login</>}
+              <button
+                type="submit"
+                className="btn btn-primary w-full mt-4 font-black uppercase italic tracking-widest rounded-2xl shadow-lg shadow-primary/20"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="loading loading-spinner"></span>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" /> Login
+                  </>
+                )}
               </button>
             </form>
 
-            <div className="divider text-[10px] font-black text-base-content/30 uppercase tracking-[0.3em]">New Here?</div>
-            <Link to="/register" className="btn btn-outline btn-block rounded-2xl font-black uppercase tracking-widest text-[10px] border-base-content/20 hover:bg-base-content hover:text-base-100">
+            <div className="divider text-[10px] font-black text-base-content/30 uppercase tracking-[0.3em]">
+              New Here?
+            </div>
+            <Link
+              to="/register"
+              className="btn btn-outline btn-block rounded-2xl font-black uppercase tracking-widest text-[10px] border-base-content/20 hover:bg-base-content hover:text-base-100"
+            >
               Create Account
             </Link>
           </div>
