@@ -111,7 +111,7 @@ if (error.response?.status === 401 && !originalRequest._retry) {
   }
 );
 
-// Auth API
+// Authentication API
 export const authAPI = {
   register: async (userData) => {
     const response = await api.post('/auth/register', userData);
