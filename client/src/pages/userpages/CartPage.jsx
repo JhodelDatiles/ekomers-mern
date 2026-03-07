@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import toast from 'react-hot-toast';
 import CartSkeleton from "../../components/skeletons/CartSkeleton";
-import ConfirmationModal from "../../components/modals/ConfirmationModal";
 
 const CartPage = () => {
   const { cart, updateQuantity, removeFromCart, loading: cartLoading } = useCart();
@@ -17,7 +16,6 @@ const CartPage = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [processingId, setProcessingId] = useState(null);
-  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   const cartItems = useMemo(() => cart?.items || [], [cart?.items]);
 
@@ -34,7 +32,7 @@ const CartPage = () => {
 
   const selectedTotal = useMemo(() => {
     return cartItems
-      .filter(item => selectedIds.includes(item._id))
+      .filter(item => selectedIds.includes(String(item._id)))
       .reduce((acc, item) => acc + (item.price * item.quantity), 0);
   }, [cartItems, selectedIds]);
 
@@ -57,12 +55,13 @@ const CartPage = () => {
     if (selectedIds.length === cartItems.length && cartItems.length !== 0) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(cartItems.map(item => item._id));
+      setSelectedIds(cartItems.map(item => String(item._id)));
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
+    if (!window.confirm("PURGE SELECTED ITEMS?")) return;
     setIsDeleting(true);
     const deletePromise = Promise.all(selectedIds.map(id => removeFromCart(id)));
     toast.promise(deletePromise, {
@@ -90,10 +89,12 @@ const CartPage = () => {
 
   const handleCheckout = () => {
     if (selectedIds.length === 0) return toast.error("SELECT ITEMS TO INITIALIZE");
-    const itemsToBuy = cartItems.filter(item => selectedIds.includes(item._id));
+    console.log('🛒 selectedIds:', selectedIds);
+    console.log('🛒 cartItems _ids:', cartItems.map(i => ({ id: i._id, type: typeof i._id, str: String(i._id) })));
+    const itemsToBuy = cartItems.filter(item => selectedIds.includes(String(item._id)));
+    console.log('🛒 itemsToBuy:', itemsToBuy.length);
     navigate('/checkout', { state: { items: itemsToBuy, total: selectedTotal } });
   };
-
   if (cartLoading && cartItems.length === 0) {
     return <CartSkeleton />;
   }
@@ -113,7 +114,7 @@ const CartPage = () => {
         {cartItems.length > 0 && (
           <div className="flex items-center gap-6">
             {selectedIds.length > 0 && (
-              <button onClick={() => setShowBulkDeleteModal(true)} disabled={isDeleting} className="btn btn-error btn-outline btn-xs px-4 rounded-xl font-black italic">
+              <button onClick={handleBulkDelete} disabled={isDeleting} className="btn btn-error btn-outline btn-xs px-4 rounded-xl font-black italic">
                 {isDeleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} PURGE ({selectedIds.length})
               </button>
             )}
@@ -140,7 +141,7 @@ const CartPage = () => {
               <h2 className="text-[11px] font-black uppercase tracking-[0.3em] opacity-40 italic ml-2">Batch: {date}</h2>
               <div className="space-y-3">
                 {items.map((item) => {
-                  const isSelected = selectedIds.includes(item._id);
+                  const isSelected = selectedIds.includes(String(item._id));
                   const isUpdating = processingId === item._id;
                   const stock = item.productId?.sizes?.find(s => s.size === item.size)?.stock || 0;
                   const isAtMax = item.quantity >= stock;
@@ -148,7 +149,7 @@ const CartPage = () => {
                   return (
                     <div key={item._id} className={`flex flex-col md:flex-row md:items-center p-5 bg-base-100 border transition-all rounded-[24px] gap-4 ${isSelected ? "border-primary bg-primary/5 shadow-xl" : "border-base-300"}`}>
                       <div className="flex items-center gap-6 flex-1">
-                        <button onClick={() => setSelectedIds(prev => isSelected ? prev.filter(i => i !== item._id) : [...prev, item._id])} className={isSelected ? "text-primary" : "opacity-20"}>
+                        <button onClick={() => setSelectedIds(prev => isSelected ? prev.filter(i => i !== String(item._id)) : [...prev, String(item._id)])} className={isSelected ? "text-primary" : "opacity-20"}>
                           {isSelected ? <CheckSquare size={24} /> : <Square size={24} />}
                         </button>
                         <div className="relative w-20 h-20 bg-base-200 rounded-2xl overflow-hidden shrink-0">
@@ -200,14 +201,6 @@ const CartPage = () => {
           </div>
         </div>
       )}
-      <ConfirmationModal
-        isOpen={showBulkDeleteModal}
-        title="Purge Selected?"
-        message={`You are about to permanently remove ${selectedIds.length} item(s) from your cart. This cannot be undone.`}
-        loading={isDeleting}
-        onConfirm={async () => { setShowBulkDeleteModal(false); await handleBulkDelete(); }}
-        onCancel={() => setShowBulkDeleteModal(false)}
-      />
     </div>
   );
 };
