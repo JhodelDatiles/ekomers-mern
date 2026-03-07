@@ -12,7 +12,6 @@ const paymongo = new Paymongo(config.paymongoSecret);
 export const createPaymentIntent = async (req, res) => {
   try {
     const { amount, paymentMethod } = req.body; // amount in centavos (e.g., 10000 = PHP 100.00)
-    
     // Get user's cart to verify amount
     const cart = await Cart.findOne({ userId: req.user.id });
     if (!cart || cart.items.length === 0) {
@@ -224,7 +223,7 @@ export const createEWalletSource = async (req, res) => {
 
 export const createQrPhPayment = async (req, res) => {
   try {
-    const { shippingInfo, isDirectPurchase, directProductId, directQuantity, directSize } = req.body;
+    const { shippingInfo, isDirectPurchase, directProductId, directQuantity, directSize, selectedCartItemIds } = req.body;
     const userId = req.user.id;
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
@@ -234,12 +233,9 @@ export const createQrPhPayment = async (req, res) => {
 
     if (isDirectPurchase) {
       // ── DIRECT / BUY NOW ──
-      // Validate inputs exist
       if (!directProductId || !directSize || !directQuantity) {
         return res.status(400).json({ message: 'Missing direct purchase details' });
       }
-
-      // Load product from DB — verify price and stock server-side
       const product = await Product.findById(directProductId);
       if (!product) return res.status(404).json({ message: 'Product not found' });
 
@@ -248,9 +244,8 @@ export const createQrPhPayment = async (req, res) => {
         return res.status(400).json({ message: 'Insufficient stock for selected size' });
       }
 
-      const serverPrice = sizeData.price; // ← price from DB, never frontend
+      const serverPrice = sizeData.price;
       serverTotal = serverPrice * directQuantity;
-
       orderItems = [{
         productId: product._id,
         name: product.name,
@@ -261,16 +256,28 @@ export const createQrPhPayment = async (req, res) => {
       }];
 
     } else {
-      // ── CART CHECKOUT ──
-      // SECURITY: Load cart from DB — never trust frontend for prices
+      // ── CART CHECKOUT — only selected items ──
       const cart = await Cart.findOne({ userId }).populate('items.productId');
       if (!cart || cart.items.length === 0) {
         return res.status(400).json({ message: 'Cart is empty' });
       }
 
-      serverTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      // SECURITY: filter to selected items, calculate total server-side
+      const selectedIds = selectedCartItemIds || [];
+      console.log('🔍 selectedIds from frontend:', JSON.stringify(selectedIds));
+console.log('🔍 all cart item IDs:', cart.items.map(i => String(i._id)));
+const selectedItems2 = cart.items.filter(item => selectedIds.includes(String(item._id)));
+console.log('🔍 matched items count:', selectedItems2.length);
+      const selectedItems = selectedIds.length > 0
+        ? cart.items.filter(item => selectedIds.includes(String(item._id)))
+        : cart.items;
 
-      orderItems = cart.items.map(item => ({
+      if (selectedItems.length === 0) {
+        return res.status(400).json({ message: 'No matching cart items found' });
+      }
+
+      serverTotal = selectedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      orderItems = selectedItems.map(item => ({
         productId: item.productId._id,
         name: item.productId.name,
         price: item.price,
@@ -316,8 +323,7 @@ export const createQrPhPayment = async (req, res) => {
     const attrs = attachRes.data.data.attributes;
     const qrImage = attrs.next_action?.code?.image_url || attrs.next_action?.data?.image_url;
 
-    // SECURITY: Save pending order NOW with server-verified data
-    // confirmQrPhOrder will just update this — no frontend data trusted
+    // Save pending order with server-verified data
     await Order.create({
       userId,
       paymentIntentId,
@@ -330,7 +336,7 @@ export const createQrPhPayment = async (req, res) => {
       isDirectPurchase: !!isDirectPurchase
     });
 
-    console.log(`✅ QR PH pending order created: ${paymentIntentId}`);
+    console.log(`✅ QR PH pending order: ${paymentIntentId} (${orderItems.length} items, ₱${serverTotal})`);
     res.status(200).json({ paymentIntentId, qrImage, status: attrs.status });
 
   } catch (error) {

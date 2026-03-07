@@ -79,115 +79,6 @@ export const initiatePayMongoCheckout = async (req, res) => {
   }
 };
 
-// export const handlePayMongoWebhook = async (req, res) => {
-//   try {
-//     const eventPayload = req.body.data;
-    
-//     if (eventPayload.attributes.type === 'checkout_session.payment.paid') {
-//       const checkoutSession = eventPayload.attributes.data;
-      
-//       const metadata = checkoutSession.attributes.payments?.[0]?.attributes?.metadata 
-//                   || checkoutSession.attributes.payment_intent?.attributes?.metadata 
-//                   || checkoutSession.attributes.metadata;
-
-//       if (!metadata || !metadata.userId) return res.status(200).json({ received: true });
-
-//       const { userId, cartItemIds, directItemData } = metadata;
-
-//       const existingOrder = await Order.findOne({ checkoutSessionId: checkoutSession.id });
-//       if (existingOrder) return res.status(200).json({ received: true });
-
-//       let orderItems = [];
-
-//       if (cartItemIds === "DIRECT_BUY" && directItemData) {
-//         const rawData = JSON.parse(directItemData);
-//         orderItems = rawData.map(item => ({
-//           productId: item.pId,
-//           name: item.n,
-//           price: item.pr,
-//           quantity: item.q,
-//           size: item.s || 'N/A',
-//           image: item.img
-//         }));
-//       } else {
-//         const targetCartItemIds = cartItemIds.split(',');
-//         const userCart = await Cart.findOne({ userId }).populate('items.productId');
-        
-//         if (userCart) {
-//           const purchasedItems = userCart.items.filter(item => 
-//             targetCartItemIds.includes(item._id.toString())
-//           );
-
-//           orderItems = purchasedItems.map(item => ({
-//             productId: item.productId?._id,
-//             name: item.productId?.name || "Product",
-//             price: item.price,
-//             quantity: item.quantity,
-//             size: item.size || 'N/A',
-//             image: item.productId?.images?.[0]?.url || item.productId?.images?.[0]
-//           }));
-
-//           await Cart.updateOne(
-//             { userId },
-//             { $pull: { items: { _id: { $in: targetCartItemIds } } } }
-//           );
-//         }
-//       }
-
-//       if (orderItems.length === 0 || !orderItems[0].name) {
-//         console.error("❌ WEBHOOK ERROR: Name is missing in order items", orderItems);
-//         return res.status(200).json({ received: true });
-//       }
-
-//       const amountPaid = checkoutSession.attributes.payments[0].attributes.amount / 100;
-
-//       const newOrder = await Order.create({
-//         userId,
-//         checkoutSessionId: checkoutSession.id,
-//         items: orderItems,
-//         totalAmount: amountPaid,
-//         shippingInfo: {
-//           fullName: metadata.fullName,
-//           address: metadata.address,
-//           city: metadata.city,
-//           postalCode: metadata.postalCode,
-//           contactNumber: metadata.contactNumber,
-//           deliveryInstructions: metadata.instructions
-//         },
-//         paymentMethod: checkoutSession.attributes.payment_method_used || 'paymongo',
-//         paymentStatus: 'paid',
-//         status: 'Order in Progress'
-//       });
-
-//       // 📉 AUTOMATIC STOCK DEDUCTION
-//       try {
-//         for (const item of orderItems) {
-//           await Product.updateOne(
-//             { _id: item.productId, "sizes.size": item.size },
-//             { $inc: { "sizes.$.stock": -item.quantity } }
-//           );
-//         }
-//         console.log("✅ STOCK UPDATED FOR ORDER:", newOrder._id);
-//       } catch (stockErr) {
-//         console.error("❌ STOCK UPDATE FAILED:", stockErr);
-//       }
-
-//       try {
-//         const user = await User.findById(userId);
-//         if (user?.email) await sendOrderConfirmation(newOrder, user);
-//       } catch (e) { console.error("📧 Email Failed:", e.message); }
-
-//       return res.status(200).json({ received: true });
-//     }
-//     return res.status(200).json({ received: true });
-//   } catch (err) {
-//     console.error("❌ WEBHOOK ERROR:", err);
-//     return res.status(200).json({ received: true });
-//   }
-// };
-
-// ... Rest of the functions (getUserOrders, getOrderById, etc.) stay the same
-
 export const getUserOrders = async (req, res) => {
   try {
     const orders = await Order.find({ userId: req.user.id })
@@ -243,9 +134,9 @@ export const handlePayMongoWebhook = async (req, res) => {
     const eventAttr = req.body.data.attributes;
     if (eventAttr.type === 'checkout_session.payment.paid') {
       const session = eventAttr.data.attributes;
-      const { userId, fullName, address, contactNumber, instructions } = session.metadata;
+      const { userId, fullName, address, city, postalCode, contactNumber, instructions, cartItemIds, directItemData } = session.metadata;
 
-      console.log(`📦 Processing Order for User: ${userId}`);
+      console.log(`📦 Processing Order for User: ${userId}, cartItemIds: ${cartItemIds}`);
 
       // Check for duplicate processing
       const existingOrder = await Order.findOne({ checkoutSessionId: session.id });
@@ -254,27 +145,71 @@ export const handlePayMongoWebhook = async (req, res) => {
         return res.status(200).json({ received: true });
       }
 
-      const cart = await Cart.findOne({ userId }).populate('items.productId');
-      if (!cart) {
-        console.error("❌ Logic Error: Payment successful but Cart not found.");
-        return res.status(200).json({ received: true });
-      }
+      let orderItems = [];
+      let totalAmount = 0;
 
-      // Create the Order
-      const newOrder = await Order.create({
-        userId,
-        checkoutSessionId: session.id,
-        items: cart.items.map(item => ({
+      if (cartItemIds === "DIRECT_BUY" && directItemData) {
+        // ── DIRECT / BUY NOW ──
+        const rawData = JSON.parse(directItemData);
+        orderItems = rawData.map(item => ({
+          productId: item.pId,
+          name: item.n,
+          price: item.pr,
+          quantity: item.q,
+          size: item.s || 'N/A',
+          image: item.img
+        }));
+        totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+      } else {
+        // ── CART CHECKOUT — only use selected items ──
+        const targetIds = cartItemIds ? cartItemIds.split(',') : [];
+        const cart = await Cart.findOne({ userId }).populate('items.productId');
+
+        if (!cart) {
+          console.error("❌ Cart not found for userId:", userId);
+          return res.status(200).json({ received: true });
+        }
+
+        // Filter to only the selected items
+        const purchasedItems = targetIds.length > 0
+          ? cart.items.filter(item => targetIds.includes(item._id.toString()))
+          : cart.items; // fallback: all items if no IDs (shouldn't happen)
+
+        if (purchasedItems.length === 0) {
+          console.error("❌ No matching cart items found for IDs:", targetIds);
+          return res.status(200).json({ received: true });
+        }
+
+        orderItems = purchasedItems.map(item => ({
           productId: item.productId._id,
           name: item.productId.name,
           quantity: item.quantity,
           price: item.price,
-          size: item.size
-        })),
-        totalAmount: cart.totalAmount,
+          size: item.size || 'N/A',
+          image: item.productId?.images?.[0]?.url
+        }));
+        totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+
+        // Only remove the purchased items from cart
+        await Cart.findOneAndUpdate(
+          { userId },
+          { $pull: { items: { _id: { $in: targetIds } } } }
+        );
+        // Recalculate cart total
+        const updatedCart = await Cart.findOne({ userId });
+        if (updatedCart) {
+          updatedCart.totalAmount = updatedCart.items.reduce((acc, i) => acc + i.quantity * i.price, 0);
+          await updatedCart.save();
+        }
+      }
+
+      const newOrder = await Order.create({
+        userId,
+        checkoutSessionId: session.id,
+        items: orderItems,
+        totalAmount,
         shippingInfo: { 
-          fullName, 
-          address, 
+          fullName, address, city, postalCode,
           contactNumber, 
           deliveryInstructions: instructions 
         },
@@ -283,16 +218,20 @@ export const handlePayMongoWebhook = async (req, res) => {
         status: 'Order in Progress'
       });
 
-      // Stock management
-      for (const item of cart.items) {
+      // Deduct stock for purchased items only
+      for (const item of orderItems) {
         await Product.updateOne(
-          { _id: item.productId._id, "sizes.size": item.size },
-          { $inc: { "sizes.$.stock": -item.quantity, stock: -item.quantity } }
+          { _id: item.productId, "sizes.size": item.size },
+          { $inc: { "sizes.$.stock": -item.quantity } }
         );
       }
 
-      await Cart.findOneAndDelete({ userId });
-      console.log(`✅ Success: Order ${newOrder._id} created. Cart wiped.`);
+      try {
+        const user = await User.findById(userId);
+        if (user?.email) await sendOrderConfirmation(newOrder, user);
+      } catch (e) { console.error('📧 Email failed:', e.message); }
+
+      console.log(`✅ Order ${newOrder._id} created with ${orderItems.length} items.`);
     }
 
     return res.status(200).json({ received: true });
@@ -373,7 +312,6 @@ export const cancelOrder = async (req, res) => {
     res.status(500).json({ message: "Failed to request cancellation" });
   }
 };
-
 // ─────────────────────────────────────────────────────────────────
 // CONFIRM QR PH ORDER — frontend fallback after polling succeeds
 // SECURITY: never trusts frontend data — looks up pending order
@@ -388,7 +326,7 @@ export const confirmQrPhOrder = async (req, res) => {
       return res.status(400).json({ message: 'paymentIntentId required' });
     }
 
-    // 1. ALWAYS verify payment with PayMongo first (server-to-server)
+    // 1. Verify payment with PayMongo server-to-server
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
     const intentRes = await axios.get(
@@ -404,71 +342,53 @@ export const confirmQrPhOrder = async (req, res) => {
       return res.status(400).json({ message: `Payment not confirmed. Status: ${piStatus}` });
     }
 
-    // 2. Verify the payment intent belongs to this user
     if (piMetadata?.userId && String(piMetadata.userId) !== String(userId)) {
       console.error('🚨 userId mismatch — possible fraud');
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    // 3. Find pending order (may not exist if createQrPhPayment failed to save it)
     let pendingOrder = await Order.findOne({ paymentIntentId });
 
     if (pendingOrder) {
-      // Verify ownership
       if (String(pendingOrder.userId) !== String(userId)) {
-        console.error('🚨 userId mismatch on pending order — possible fraud');
         return res.status(403).json({ message: 'Unauthorized' });
       }
-      // Already confirmed — webhook fired first, we're done
       if (pendingOrder.paymentStatus === 'paid') {
         console.log(`✅ Order already confirmed (webhook was first): ${pendingOrder._id}`);
         return res.status(200).json({ order: pendingOrder, alreadyConfirmed: true });
       }
-      // Update to paid
       pendingOrder.paymentStatus = 'paid';
       pendingOrder.status = 'Order in Progress';
       await pendingOrder.save();
     } else {
-      // Pending order was never created (createQrPhPayment failed to save)
-      // Check if webhook already created a paid order
-      console.warn(`⚠️ No pending order found for ${paymentIntentId} — checking for webhook-created order`);
-      const webhookOrder = await Order.findOne({ paymentIntentId });
-      if (webhookOrder) {
-        return res.status(200).json({ order: webhookOrder, alreadyConfirmed: true });
-      }
-      // Last resort: return success anyway since payment is confirmed
       console.error(`❌ No order found for ${paymentIntentId} but payment succeeded`);
       return res.status(200).json({ message: 'Payment confirmed but order record missing. Please contact support.', alreadyConfirmed: true });
     }
 
-    // 6. Deduct stock
+    // Deduct stock
     for (const item of pendingOrder.items) {
       if (item.productId && item.size) {
         await Product.updateOne(
-          { _id: item.productId, "sizes.size": item.size },
-          { $inc: { "sizes.$.stock": -item.quantity } }
+          { _id: item.productId, 'sizes.size': item.size },
+          { $inc: { 'sizes.$.stock': -item.quantity } }
         );
       }
     }
 
-    // 7. Remove purchased items from cart in DB (skip for direct/buy-now purchases)
+    // Remove purchased items from cart (skip for direct/buy-now)
     if (!pendingOrder.isDirectPurchase) {
-      const cart = await Cart.findOne({ userId });
-      if (cart) {
-        const remainingItems = cart.items.filter(cartItem =>
-          !pendingOrder.items.some(o => String(o.productId) === String(cartItem.productId) && o.size === cartItem.size)
-        );
-        if (remainingItems.length === 0) {
-          await Cart.findOneAndDelete({ userId });
-        } else {
-          cart.items = remainingItems;
-          cart.totalAmount = remainingItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-          await cart.save();
-        }
+      const paidProductIds = pendingOrder.items.map(i => String(i.productId));
+      await Cart.findOneAndUpdate(
+        { userId },
+        { $pull: { items: { productId: { $in: paidProductIds } } } }
+      );
+      const updatedCart = await Cart.findOne({ userId });
+      if (updatedCart) {
+        updatedCart.totalAmount = updatedCart.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        await updatedCart.save();
       }
     }
 
-    // 8. Send confirmation email
     try {
       const user = await User.findById(userId);
       if (user?.email) await sendOrderConfirmation(pendingOrder, user);
@@ -485,13 +405,13 @@ export const confirmQrPhOrder = async (req, res) => {
   }
 };
 
-// Poll order status by paymentIntentId — frontend uses this instead of polling PayMongo
+// Poll order status by paymentIntentId
 export const getOrderByPaymentIntent = async (req, res) => {
   try {
     const { paymentIntentId } = req.params;
     const order = await Order.findOne({ 
       paymentIntentId, 
-      userId: req.user.id  // security: only return if it belongs to this user
+      userId: req.user.id
     });
     if (!order) return res.status(404).json({ status: 'pending' });
     res.status(200).json({ status: order.paymentStatus, orderId: order._id });

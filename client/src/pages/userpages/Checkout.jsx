@@ -113,6 +113,8 @@ const Checkout = () => {
   }, [checkoutItems, isDirectPurchase, navigate, updateLocalCartAfterPayment, fetchCart]);
 
   const handleQrPhPayment = async () => {
+    console.log('🔍 checkoutItems:', checkoutItems.map(i => ({ id: i._id, name: i.name || i.productId?.name })));
+    console.log('🔍 selectedCartItemIds to send:', checkoutItems.map(i => i._id));
     if (!activeAddress) return toast.error("No shipping address selected.");
     setLoading(true);
     const toastId = toast.loading("Generating QR Code...");
@@ -129,6 +131,7 @@ const Checkout = () => {
         directProductId: directItem ? (directItem.productId?._id || directItem.productId) : undefined,
         directQuantity: directItem?.quantity,
         directSize: directItem?.size,
+        selectedCartItemIds: !isDirectPurchase ? checkoutItems.map(i => String(i._id)) : undefined,
       });
 
       if (!result.qrImage) {
