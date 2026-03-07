@@ -14,7 +14,7 @@ import productRoutes from './routes/productRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
-import adminRoutes from './routes/adminRoutes.js'; // Settings/General Admin
+import adminRoutes from './routes/adminRoutes.js';
 import adminProductRoutes from './routes/adminProductRoutes.js';
 import adminOrderRoutes from './routes/adminOrderRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
@@ -90,8 +90,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
-app.use('/api/cart', cartRoutes);     // Includes DELETE /api/cart/clear
-app.use('/api/orders', orderRoutes);   // Includes POST /api/orders/webhook
+app.use('/api/cart', cartRoutes); 
+app.use('/api/orders', orderRoutes); 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/reviews', reviewRoutes);
@@ -101,7 +101,7 @@ app.use('/api/map', mapRoutes);
 // 5. ADMIN SPECIFIC ROUTES (Structured for clarity)
 app.use('/api/admin/products', adminProductRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
-// ✅ adminRoutes LAST - it handles /api/settings and /api/admin/users
+// adminRoutes LAST - it handles /api/settings and /api/admin/users
 // Must be after all other specific routes to avoid conflicts
 app.use('/api/', adminRoutes); // Matching your settingsAPI in frontend
 
@@ -140,7 +140,7 @@ app.use((req, res) => {
 
 // 7. GLOBAL ERROR HANDLER/ throw an error if the NODE_ENV is on development
 app.use((err, req, res, next) => {
-  console.error('🔥 Server Error:', err.stack);
+  console.error('Server Error:', err.stack);
   res.status(err.status || 500).json({ 
     message: err.message || 'Something went wrong!',
     error: isProduction ? {} : err 
@@ -150,16 +150,12 @@ app.use((err, req, res, next) => {
 // 8. SERVER STARTUP
 const startServer = async () => {
   try {
-    await conn(); // Database Connection
+    await conn();
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(` Test webhook URL: https://appointed-melida-biserially.ngrok-free.dev/api/orders/webhook`);
-      console.log(` Live webhook URL: https://ekomers-mern.onrender.com/api/orders/webhook`);
-      console.log('🔑 BREVO KEY:', process.env.BREVO_API_KEY ? '✅ loaded' : '❌ undefined');
-      console.log('🔑 config.brevoApiKey:', config.brevoApiKey ? '✅ loaded' : '❌ undefined');
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('❌ Database connection failed:', error.message);
+    console.error('Database connection failed:', error.message);
     process.exit(1);
   }
 };
