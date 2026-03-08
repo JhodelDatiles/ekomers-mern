@@ -8,14 +8,20 @@ const ForgotPassword = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1: Email, 2: Code & New Password
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({ email: "", code: "", newPassword: "" });
+  // Form state
+  const [formData, setFormData] = useState({ 
+    email: "", 
+    code: "", 
+    newPassword: "" 
+  });
 
+  // Sends forgot password request to the API with the email, then moves to step 2 if successful
   const handleRequest = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await authAPI.forgotPassword(formData.email);
-      toast.success("Check your inbox!");
+      toast.success("Check your email inbox!");
       setStep(2);
     } catch (err) {
       toast.error(err.response?.data?.message || "Something went wrong");
@@ -23,7 +29,7 @@ const ForgotPassword = () => {
       setLoading(false);
     }
   };
-
+  // Sends reset password request to the API with the code and new password, then redirects to login
   const handleReset = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -47,8 +53,9 @@ const ForgotPassword = () => {
             {step === 1 ? "Reset your credentials" : "Enter security code"}
           </p>
         </div>
-
+        {/* FORM */}
         {step === 1 ? (
+          // STEP 1
           <form onSubmit={handleRequest} className="space-y-4 animate-in fade-in slide-in-from-right-4">
             <div className="form-control">
               <label className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 mb-2">
@@ -67,6 +74,7 @@ const ForgotPassword = () => {
             </button>
           </form>
         ) : (
+          // STEP 2 
           <form onSubmit={handleReset} className="space-y-4 animate-in fade-in slide-in-from-left-4">
             <div className="form-control">
               <label className="label-text flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest opacity-60 mb-2">
