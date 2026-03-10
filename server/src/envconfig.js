@@ -10,17 +10,17 @@ export const config = {
   paymongoWebhooks: isProduction 
     ? process.env.PAYMONGO_WEBHOOK_SECRET_LIVE 
     : process.env.PAYMONGO_WEBHOOK_SECRET_TEST,
-    
+
   clientUrl: isProduction 
     ? process.env.CLIENT_URL_PROD 
-    : 'http://localhost:5173',
+    : 'http://localhost:5173',  // ✅ hardcoded, no env variable needed
 
   mongoUri: process.env.MONGO_URI,
   port: process.env.PORT || 5000,
-  // Resend
-  // resendApiKey: process.env.RESEND_API_KEY,
-  // emailFrom: process.env.EMAIL_FROM || 'EKOMERS <onboarding@resend.dev>',
-  // Brevo — free email API, no domain needed, works on Render free tier
   brevoApiKey: process.env.BREVO_API_KEY,
   emailFrom: process.env.EMAIL_FROM || 'noreply@ekomers.com',
 };
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('clientUrl will be:', config.clientUrl);
+console.log('PayMongo key starts with:', config.paymongoSecret?.slice(0, 10));
+console.log('PayMongo webhook starts with:', config.paymongoSecret?.slice(0, 10));

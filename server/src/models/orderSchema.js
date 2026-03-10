@@ -65,5 +65,9 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+orderSchema.index({ userId: 1, createdAt: -1 });       // getUserOrders query
+orderSchema.index({ checkoutSessionId: 1 }, { sparse: true }); // webhook dedup
+orderSchema.index({ paymentIntentId: 1 }, { sparse: true });   // QR PH polling
 const Order = mongoose.model('Order', orderSchema);
+
 export default Order;

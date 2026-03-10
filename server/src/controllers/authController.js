@@ -3,9 +3,6 @@ import { sendVerificationEmail, sendSecurityCode } from '../services/emailServic
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 // Helpere fucntion for Cookies
 const getCookieOptions = () => {
@@ -14,8 +11,8 @@ const getCookieOptions = () => {
   return {
     httpOnly: true,
     path: '/',
-    secure: true, 
-    sameSite: 'none', 
+    secure: isProduction, 
+    sameSite: isProduction ? 'none' : 'lax',
   };
 };
 
@@ -77,7 +74,7 @@ export const refreshToken = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    // 🚀 NEW FEATURE: Send the full user back so the Interceptor can broadcast it
+    //NEW FEATURE: Send the full user back so the Interceptor can broadcast it
     const fullUser = await User.findById(user._id).select('-password');
     res.status(200).json({ 
       message: "Token refreshed",
@@ -110,7 +107,7 @@ export const register = async (req, res) => {
     try {
       await sendVerificationEmail(user);
     } catch (emailErr) { // used to store and display validation messages specifically for the email input field.
-      console.error("❌ Email Service Failed:", emailErr.message);
+      console.error("Email Service Failed:", emailErr.message);
     }
     // Success message
     res.status(201).json({ 
@@ -118,7 +115,7 @@ export const register = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Global Register Error:", error);
+    console.error("Failed to register:", error);
     res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 };
@@ -127,11 +124,6 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email: email.toLowerCase() });
-    console.log("User found:", !!user);
-    if (user) {
-      const isMatch = await bcrypt.compare(password, user.password);
-      console.log("Password Match:", isMatch);
-    }
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: "Invalid credentials!" });
     }
@@ -144,7 +136,6 @@ export const login = async (req, res) => {
     }
     setTokenCookies(res, user);
 
-    // 🚀 NEW FEATURE: Fetch full user profile to include addresses for instant UI sync
     const fullUser = await User.findById(user._id).select('-password');
 
     res.json({
@@ -177,20 +168,25 @@ export const verifyEmail = async (req, res) => {
 };
 
 export const resendVerification = async (req, res) => {
-  const { email } = req.body;
-  const user = await User.findOne({ email: email.toLowerCase() });
-
-  if (!user) return res.status(404).json({ message: "User not found" });
-  if (user.isVerified) return res.status(400).json({ message: "Already verified" });
-
-  // Use verificationToken to match your verifyEmail function
-  const newToken = crypto.randomBytes(32).toString('hex');
-  user.verificationToken = newToken; 
-  await user.save();
-
-  await sendVerificationEmail(user);
-
-  res.status(200).json({ message: "Verification email sent!" });
+  try {    
+    const { email } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+  
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (user.isVerified) return res.status(400).json({ message: "Already verified" });
+  
+    // Use verificationToken to match your verifyEmail function
+    const newToken = crypto.randomBytes(32).toString('hex');
+    user.verificationToken = newToken; 
+    await user.save();
+  
+    await sendVerificationEmail(user);
+  
+    res.status(200).json({ message: "Verification email sent!" });
+  } catch (error) {
+    console.error("Resend verification error:", error.message);
+    res.status(500).json({ message: "Failed to resend verification email" });
+  }
 };
 
 export const getCurrentUser = async (req, res) => {
