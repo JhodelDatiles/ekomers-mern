@@ -30,7 +30,7 @@ const productSchema = new mongoose.Schema(
   }
 );
 productSchema.index({ name: 'text', description: 'text' });
-
+productSchema.index({ name: 'text' }); // enables text search
 const Product = mongoose.model('Product', productSchema);
 
 export default Product;

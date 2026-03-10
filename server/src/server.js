@@ -1,6 +1,5 @@
 import { config } from './envconfig.js';
 import express from 'express';
-import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import conn from './config/db.js';
@@ -21,8 +20,6 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import mapRoutes from './routes/map.js'; 
 import wishlistRoutes from './routes/wishlistRoutes.js'; 
-
-dotenv.config();
 
 const app = express();
 app.set('trust proxy', 1); // Allows cookies to be secure over ngrok
@@ -80,7 +77,7 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
+ 
 // 3. HEALTH CHECK
 app.get('/api/health', (req, res) => {
   res.json({ message: 'E-commerce API is running!', mode: isProduction ? 'production' : 'development'});

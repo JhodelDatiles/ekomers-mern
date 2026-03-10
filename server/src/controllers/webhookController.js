@@ -1,8 +1,10 @@
+import axios from 'axios';
 import crypto from 'crypto';
 import Order from '../models/orderSchema.js';
 import Cart from '../models/cartSchema.js';
 import Product from '../models/productSchema.js';
 import User from '../models/userSchema.js';
+import PendingPayment from '../models/pendingPaymentSchema.js';
 import { sendOrderConfirmation } from '../services/emailService.js';
 import { config } from '../envconfig.js';
 
@@ -45,9 +47,35 @@ export const handlePayMongoWebhook = async (req, res) => {
   if (type === 'checkout_session.payment.paid') {
     try {
       const session = event.data.attributes;
-      const { userId, fullName, address, city, postalCode, contactNumber, instructions, cartItemIds, directItemData } = session.metadata;
+      const sessionId = event.data.id;
 
-      const existing = await Order.findOne({ checkoutSessionId: event.data.id });
+      // PayMongo test mode strips metadata from webhook payload — fetch directly
+      let metadata = session.metadata;
+      if (!metadata) {
+        console.log('⚠️ Metadata null in webhook — fetching session from PayMongo API...');
+        const authHeader = `Basic ${Buffer.from(`${config.paymongoSecret.trim()}:`).toString('base64')}`;
+        const fetched = await axios.get(
+          `https://api.paymongo.com/v1/checkout_sessions/${sessionId}`,
+          { headers: { authorization: authHeader, accept: 'application/json' } }
+        );
+        metadata = fetched.data.data.attributes.metadata;
+        console.log('📋 Fetched metadata:', JSON.stringify(metadata));
+      }
+
+      if (!metadata) {
+        console.error('❌ Metadata still null after fetch — cannot process order');
+        return res.status(200).json({ received: true });
+      }
+
+      const {
+        userId, fullName, address, city, postalCode,
+        contactNumber, instructions, cartItemIds, directItemData
+      } = metadata;
+
+      console.log(`📦 Processing order for user: ${userId}, cartItemIds: ${cartItemIds}`);
+
+      // Duplicate check
+      const existing = await Order.findOne({ checkoutSessionId: sessionId });
       if (existing) {
         console.log('⚠️ Duplicate checkout session, skipping');
         return res.status(200).json({ received: true });
@@ -57,7 +85,6 @@ export const handlePayMongoWebhook = async (req, res) => {
       let totalAmount = 0;
 
       if (cartItemIds === 'DIRECT_BUY' && directItemData) {
-        // ── DIRECT / BUY NOW ──
         const rawData = JSON.parse(directItemData);
         orderItems = rawData.map(item => ({
           productId: item.pId,
@@ -65,12 +92,10 @@ export const handlePayMongoWebhook = async (req, res) => {
           price: item.pr,
           quantity: item.q,
           size: item.s || 'N/A',
-          image: item.img
         }));
         totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
       } else {
-        // ── CART CHECKOUT — only process selected items ──
         const targetIds = cartItemIds ? cartItemIds.split(',') : [];
         const cart = await Cart.findOne({ userId }).populate('items.productId');
 
@@ -81,7 +106,7 @@ export const handlePayMongoWebhook = async (req, res) => {
 
         const purchasedItems = targetIds.length > 0
           ? cart.items.filter(item => targetIds.includes(item._id.toString()))
-          : cart.items; // fallback if no IDs
+          : cart.items;
 
         if (purchasedItems.length === 0) {
           console.error('❌ No matching cart items for IDs:', targetIds);
@@ -98,7 +123,6 @@ export const handlePayMongoWebhook = async (req, res) => {
         }));
         totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-        // Remove only purchased items from cart
         await Cart.findOneAndUpdate(
           { userId },
           { $pull: { items: { _id: { $in: targetIds } } } }
@@ -110,17 +134,18 @@ export const handlePayMongoWebhook = async (req, res) => {
         }
       }
 
-      // Deduct stock
+      // Atomic stock deduction
       for (const item of orderItems) {
-        await Product.updateOne(
-          { _id: item.productId, 'sizes.size': item.size },
+        const result = await Product.findOneAndUpdate(
+          { _id: item.productId, 'sizes.size': item.size, 'sizes.stock': { $gte: item.quantity } },
           { $inc: { 'sizes.$.stock': -item.quantity } }
         );
+        if (!result) console.warn(`⚠️ Insufficient stock for product ${item.productId} size ${item.size}`);
       }
 
       const newOrder = await Order.create({
         userId,
-        checkoutSessionId: event.data.id,
+        checkoutSessionId: sessionId,
         items: orderItems,
         totalAmount,
         shippingInfo: { fullName, address, city, postalCode, contactNumber, deliveryInstructions: instructions },
@@ -135,13 +160,14 @@ export const handlePayMongoWebhook = async (req, res) => {
       } catch (e) { console.error('📧 Email failed:', e.message); }
 
       console.log(`✅ Checkout order created: ${newOrder._id} (${orderItems.length} items)`);
+
     } catch (err) {
       console.error('❌ Checkout webhook error:', err.message);
     }
     return res.status(200).json({ received: true });
   }
 
-  // ─── PAYMENT PAID (QR PH via payment.paid event) ───
+  // ─── PAYMENT PAID (QR PH) ───
   if (type === 'payment.paid') {
     try {
       const payment = event.data;
@@ -154,52 +180,71 @@ export const handlePayMongoWebhook = async (req, res) => {
         return res.status(200).json({ received: true });
       }
 
-      const pendingOrder = await Order.findOne({ paymentIntentId });
-
-      if (!pendingOrder) {
-        console.log(`⚠️ No pending order for intent ${paymentIntentId}`);
+      // ✅ Duplicate check — confirmQrPhOrder may have already created the Order
+      const existingOrder = await Order.findOne({ paymentIntentId });
+      if (existingOrder) {
+        console.log(`⚠️ Order already exists for intent ${paymentIntentId} — skipping`);
         return res.status(200).json({ received: true });
       }
 
-      if (pendingOrder.paymentStatus === 'paid') {
-        console.log(`⚠️ Order already paid: ${pendingOrder._id}`);
+      // ✅ Look up PendingPayment
+      const pending = await PendingPayment.findOne({ paymentIntentId });
+      if (!pending) {
+        console.log(`⚠️ No PendingPayment found for intent ${paymentIntentId}`);
         return res.status(200).json({ received: true });
       }
 
-      pendingOrder.paymentStatus = 'paid';
-      pendingOrder.status = 'Order in Progress';
-      await pendingOrder.save();
+      // ✅ Create real Order from PendingPayment data
+      const newOrder = await Order.create({
+        userId: pending.userId,
+        paymentIntentId,
+        items: pending.items,
+        totalAmount: pending.totalAmount,
+        shippingInfo: pending.shippingInfo,
+        isDirectPurchase: pending.isDirectPurchase,
+        paymentMethod: 'qrph',
+        paymentStatus: 'paid',
+        status: 'Order in Progress'
+      });
 
-      // Deduct stock
-      for (const item of pendingOrder.items) {
+      // Atomic stock deduction
+      for (const item of pending.items) {
         if (item.productId && item.size) {
-          await Product.updateOne(
-            { _id: item.productId, 'sizes.size': item.size },
+          const result = await Product.findOneAndUpdate(
+            { _id: item.productId, 'sizes.size': item.size, 'sizes.stock': { $gte: item.quantity } },
             { $inc: { 'sizes.$.stock': -item.quantity } }
           );
+          if (!result) console.warn(`⚠️ Insufficient stock for product ${item.productId} size ${item.size}`);
         }
       }
 
-      // Only remove paid items from cart (skip for direct/buy-now)
-      if (!pendingOrder.isDirectPurchase) {
-        const paidProductIds = pendingOrder.items.map(i => String(i.productId));
-        await Cart.findOneAndUpdate(
-          { userId: pendingOrder.userId },
-          { $pull: { items: { productId: { $in: paidProductIds } } } }
-        );
-        const updatedCart = await Cart.findOne({ userId: pendingOrder.userId });
+      // Remove paid items from cart (skip for direct/buy-now)
+      if (!pending.isDirectPurchase) {
+        const cartItemIds = pending.cartItemIds || [];
+        if (cartItemIds.length > 0) {
+          await Cart.findOneAndUpdate(
+            { userId: pending.userId },
+            { $pull: { items: { _id: { $in: cartItemIds } } } }
+          );
+        }
+        const updatedCart = await Cart.findOne({ userId: pending.userId });
         if (updatedCart) {
-          updatedCart.totalAmount = updatedCart.items.reduce((acc, item) => acc + item.quantity * item.price, 0);
+          updatedCart.totalAmount = updatedCart.items.reduce((acc, i) => acc + i.quantity * i.price, 0);
           await updatedCart.save();
         }
       }
 
+      // ✅ Delete PendingPayment now that Order exists
+      await PendingPayment.deleteOne({ paymentIntentId });
+      console.log(`🗑️ PendingPayment cleaned up for intent ${paymentIntentId}`);
+
       try {
-        const user = await User.findById(pendingOrder.userId);
-        if (user?.email) await sendOrderConfirmation(pendingOrder, user);
+        const user = await User.findById(pending.userId);
+        if (user?.email) await sendOrderConfirmation(newOrder, user);
       } catch (e) { console.error('📧 Email failed:', e.message); }
 
-      console.log(`✅ QR PH order confirmed via payment.paid: ${pendingOrder._id}`);
+      console.log(`✅ QR PH order created via webhook: ${newOrder._id}`);
+
     } catch (err) {
       console.error('❌ payment.paid webhook error:', err.message);
     }
