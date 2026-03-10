@@ -9,7 +9,7 @@ const api = axios.create({
   headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
-    'ngrok-skip-browser-warning': '69420', // This bypasses the ngrok splash screen
+    ...(import.meta.env.DEV && { 'ngrok-skip-browser-warning': '69420' }),
   },
 });
 
@@ -96,7 +96,6 @@ if (error.response?.status === 401 && !originalRequest._retry) {
         // 2. Only log "failed" and redirect to login if it wasn't a silent initial check
         if (!requestUrl.includes('/auth/me')) {
           console.error('[API] Refresh failed, session cleared');
-          localStorage.removeItem('user');
           if (!window.location.pathname.includes('/login') && 
               !window.location.pathname.includes('/register')) {
             window.location.href = '/login'; 
@@ -271,18 +270,6 @@ export const orderAPI = {
     const response = await api.get(`/orders/by-intent/${paymentIntentId}`);
     return response.data;
   },
-};
-
-// Admin API
-export const adminAPI = {
-  getAdminOrders: async () => {
-    const response = await api.get('/admin/orders');
-    return response.data;
-  },
-  updateOrderStatus: async (id, status) => {
-    const response = await api.put(`/admin/orders/${id}`, { status });
-    return response.data;
-  }
 };
 
 // Payment API

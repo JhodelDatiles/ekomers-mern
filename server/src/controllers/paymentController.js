@@ -1,6 +1,7 @@
 import {config} from '../envconfig.js';
 import Paymongo from 'paymongo';
 import Order from '../models/orderSchema.js';
+import PendingPayment from '../models/pendingPaymentSchema.js';
 import Cart from '../models/cartSchema.js';
 import Product from '../models/productSchema.js';
 import axios from 'axios';
@@ -323,17 +324,14 @@ console.log('🔍 matched items count:', selectedItems2.length);
     const attrs = attachRes.data.data.attributes;
     const qrImage = attrs.next_action?.code?.image_url || attrs.next_action?.data?.image_url;
 
-    // Save pending order with server-verified data
-    await Order.create({
-      userId,
+    await PendingPayment.create({
       paymentIntentId,
-      items: orderItems.map(i => ({ productId: i.productId, name: i.name, price: i.price, quantity: i.quantity, size: i.size, image: i.image })),
+      userId,
+      items: orderItems,
       totalAmount: serverTotal,
       shippingInfo,
-      paymentMethod: 'qrph',
-      paymentStatus: 'pending',
-      status: 'Pending',
-      isDirectPurchase: !!isDirectPurchase
+      isDirectPurchase: !isDirectPurchase ? false : true,
+      cartItemIds: selectedCartItemIds || []
     });
 
     console.log(`✅ QR PH pending order: ${paymentIntentId} (${orderItems.length} items, ₱${serverTotal})`);
