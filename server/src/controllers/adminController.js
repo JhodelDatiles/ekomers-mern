@@ -1,5 +1,5 @@
 import User from '../models/userSchema.js';
-import Order from '../models/orderSchema.js'
+import Order from '../models/orderSchema.js';
 import Product from '../models/productSchema.js';
 import AdminSettings from '../models/adminSettingsSchema.js';
 import { cloudinary } from '../config/cloudinary.js';
@@ -8,65 +8,177 @@ import { cloudinary } from '../config/cloudinary.js';
 // 1. USER MANAGEMENT
 // ==========================================
 
+// GET /api/admin/users
+// Query params: page, limit, search, role
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({}).select('-password');
-    res.status(200).json(users);
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      role = 'all',
+    } = req.query;
+
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build filter query
+    const query = {};
+
+    if (role && role !== 'all') {
+      query.role = role;
+    }
+
+    if (search) {
+      query.$or = [
+        { username: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { fullName: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const [users, totalUsers] = await Promise.all([
+      User.find(query)
+        .select('-password')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      User.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      users,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalUsers / limitNum),
+        totalUsers,
+        limit: limitNum,
+        hasMore: skip + users.length < totalUsers,
+      },
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
 export const getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: 'User not found' });
     res.status(200).json(user);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
 export const adminUpdateUser = async (req, res) => {
   try {
     if (req.params.id === req.user.id && req.body.role && req.body.role !== 'admin') {
-      return res.status(400).json({ message: "You cannot demote yourself from Admin!" });
+      return res.status(400).json({ message: 'You cannot demote yourself from Admin!' });
     }
 
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body }, 
+      { $set: req.body },
       { new: true, runValidators: true }
     ).select('-password');
-    
-    if (!updatedUser) return res.status(404).json({ message: "User not found" });
+
+    if (!updatedUser) return res.status(404).json({ message: 'User not found' });
     res.status(200).json(updatedUser);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Update failed", error: error.message });
+    res.status(500).json({ message: 'Update failed', error: error.message });
   }
 };
 
 export const adminDeleteUser = async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
-      return res.status(400).json({ message: "Admins cannot delete their own accounts!" });
+      return res.status(400).json({ message: 'Admins cannot delete their own accounts!' });
     }
 
     const deletedUser = await User.findByIdAndDelete(req.params.id);
-    if (!deletedUser) return res.status(404).json({ message: "User not found" });
+    if (!deletedUser) return res.status(404).json({ message: 'User not found' });
 
-    res.status(200).json({ message: "User deleted by admin" });
+    res.status(200).json({ message: 'User deleted by admin' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Delete failed" });
+    res.status(500).json({ message: 'Delete failed' });
   }
 };
 
 // ==========================================
-// 2. GLOBAL STORE SETTINGS
+// 2. ADMIN PRODUCT LISTING (with pagination)
+// ==========================================
+
+// GET /api/admin/products
+// Query params: page, limit, search, category
+export const adminGetProducts = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 12,
+      search = '',
+      category = '',
+    } = req.query;
+
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (category) {
+      query.category = category;
+    }
+
+    const [products, totalProducts] = await Promise.all([
+      Product.find(query)
+        .sort({ category: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Product.countDocuments(query),
+    ]);
+
+    // Group by category for the frontend's category-section layout
+    const grouped = products.reduce((acc, product) => {
+      const cat = product.category || 'Uncategorized';
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(product);
+      return acc;
+    }, {});
+
+    res.status(200).json({
+      products,
+      grouped,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalProducts / limitNum),
+        totalProducts,
+        limit: limitNum,
+        hasMore: skip + products.length < totalProducts,
+      },
+    });
+  } catch (error) {
+    console.error('ADMIN_GET_PRODUCTS_ERROR:', error);
+    res.status(500).json({ message: 'Error fetching products', error: error.message });
+  }
+};
+
+// ==========================================
+// 3. GLOBAL STORE SETTINGS
 // ==========================================
 
 export const getStoreSettings = async (req, res) => {
@@ -77,7 +189,7 @@ export const getStoreSettings = async (req, res) => {
     }
     res.status(200).json(settings);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch settings", error: error.message });
+    res.status(500).json({ message: 'Failed to fetch settings', error: error.message });
   }
 };
 
@@ -88,7 +200,7 @@ export const updateStoreSettings = async (req, res) => {
       storeDescription: req.body.storeDescription,
       newsletterTitle: req.body.newsletterTitle,
       newsletterSubtitle: req.body.newsletterSubtitle,
-      lastUpdatedBy: req.user.id
+      lastUpdatedBy: req.user.id,
     };
 
     if (req.body.officeAddress) {
@@ -105,131 +217,114 @@ export const updateStoreSettings = async (req, res) => {
         .map(method => method.trim().toUpperCase());
     }
 
-    // --- CLOUDINARY CLEANUP LOGIC ---
     if (req.file) {
-      // 1. Find existing settings to get the old public_id
       const currentSettings = await AdminSettings.findOne();
-      
-      // 2. If an old logo exists, delete it from Cloudinary
       if (currentSettings?.storeLogo?.public_id) {
         await cloudinary.uploader.destroy(currentSettings.storeLogo.public_id);
       }
-
-      // 3. Set the new logo data
       updateData.storeLogo = {
         url: req.file.path,
-        public_id: req.file.filename
+        public_id: req.file.filename,
       };
     }
 
     const settings = await AdminSettings.findOneAndUpdate(
-      {}, 
+      {},
       { $set: updateData },
       { upsert: true, new: true, runValidators: true }
     );
 
-    res.status(200).json({ message: "Store settings updated!", settings });
+    res.status(200).json({ message: 'Store settings updated!', settings });
   } catch (error) {
-    console.error("CRITICAL SETTINGS ERROR:", error);
-    res.status(500).json({ message: "Failed to update settings", error: error.message });
+    console.error('CRITICAL SETTINGS ERROR:', error);
+    res.status(500).json({ message: 'Failed to update settings', error: error.message });
   }
 };
 
-// PUT /api/admin/orders/:id
 export const updateOrderStatus = async (req, res) => {
   try {
-    const { status } = req.body; 
+    const { status } = req.body;
     const order = await Order.findById(req.params.id);
 
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // SUCCESS: Now saving to the field the frontend actually reads
     if (status) {
-      order.orderStatus = status; 
+      order.orderStatus = status;
     }
 
     const updatedOrder = await order.save();
-    res.status(200).json({ message: "Manifest updated", order: updatedOrder });
+    res.status(200).json({ message: 'Manifest updated', order: updatedOrder });
   } catch (error) {
-    res.status(500).json({ message: "Update failed", error: error.message });
+    res.status(500).json({ message: 'Update failed', error: error.message });
   }
 };
 
-// GET /api/admin/sales-report
+// ==========================================
+// 4. SALES REPORT
+// ==========================================
+
 export const getSalesReport = async (req, res) => {
   try {
     const { view = 'day' } = req.query;
-    
-    // 1. Setup Date Formatting for Timeline
-    let format = "%Y-%m-%d";
-    if (view === 'week') format = "Week %V - %Y";
-    if (view === 'month') format = "%B %Y";
+
+    let format = '%Y-%m-%d';
+    if (view === 'week') format = 'Week %V - %Y';
+    if (view === 'month') format = '%B %Y';
 
     const validSaleCriteria = {
-      paymentStatus: "paid",
-      status: { $nin: ["Cancelled", "Cancellation Requested"] }
+      paymentStatus: 'paid',
+      status: { $nin: ['Cancelled', 'Cancellation Requested'] },
     };
 
-    // 2. Run all queries in parallel for maximum speed
-    // We added 'lowStockProducts' as the 4th item in the array
     const [timeline, topProducts, recentOrders, lowStockProducts] = await Promise.all([
-      // Timeline Aggregation
       Order.aggregate([
         { $match: validSaleCriteria },
-        { 
-          $group: { 
-            _id: { $dateToString: { format: format, date: "$createdAt" } }, 
-            totalRevenue: { $sum: "$totalAmount" }, 
-            orderCount: { $sum: 1 } 
-          } 
+        {
+          $group: {
+            _id: { $dateToString: { format, date: '$createdAt' } },
+            totalRevenue: { $sum: '$totalAmount' },
+            orderCount: { $sum: 1 },
+          },
         },
-        { $sort: { "_id": 1 } }
+        { $sort: { _id: 1 } },
       ]),
 
-      // Top Products Aggregation
       Order.aggregate([
         { $match: validSaleCriteria },
-        { $unwind: "$items" },
-        { 
-          $group: { 
-            _id: "$items.productId", 
-            name: { $first: "$items.name" }, 
-            unitsSold: { $sum: "$items.quantity" }, 
-            revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } } 
-          } 
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: '$items.productId',
+            name: { $first: '$items.name' },
+            unitsSold: { $sum: '$items.quantity' },
+            revenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
+          },
         },
         { $sort: { unitsSold: -1 } },
-        { $limit: 10 }
+        { $limit: 10 },
       ]),
 
-      // Recent Orders (The table data)
       Order.find()
         .sort({ createdAt: -1 })
         .limit(8)
         .select('orderId totalAmount status items createdAt')
         .lean(),
 
-      // NEW: Low Stock Products (Items with 5 or less remaining)
       Product.find({ stock: { $lte: 5 } })
-        .select('name stock price sizes category') // <--- ADDED 'sizes' and 'category' HERE
-        .sort({ stock: 1 }) // Show out of stock (0) first
+        .select('name stock price sizes category')
+        .sort({ stock: 1 })
         .limit(10)
-        .lean()
+        .lean(),
     ]);
 
-    // 3. Return a clean object with fallbacks
     res.status(200).json({
       timeline: timeline || [],
       topProducts: topProducts || [],
       recentOrders: recentOrders || [],
-      lowStockProducts: lowStockProducts || [] // Now this is defined!
+      lowStockProducts: lowStockProducts || [],
     });
-
   } catch (error) {
-    console.error("ADMIN_REPORT_ERROR:", error); 
-    res.status(500).json({ 
-      message: "Internal Server Error", 
-      error: error.message 
-    });
+    console.error('ADMIN_REPORT_ERROR:', error);
+    res.status(500).json({ message: 'Internal Server Error', error: error.message });
   }
 };
