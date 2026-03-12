@@ -1,7 +1,7 @@
 import express from 'express';
 import { 
   getAllUsers, getUserById, adminUpdateUser, adminDeleteUser,
-  getStoreSettings, updateStoreSettings, getSalesReport 
+  getStoreSettings, updateStoreSettings, getSalesReport, adminGetProducts
 } from '../controllers/adminController.js';
 import { protect, adminOnly } from '../middlewares/protect.js';
 import { upload } from '../config/cloudinary.js'; // Ensure this points to your multer-cloudinary config
@@ -19,6 +19,12 @@ router.get('/admin/users', protect, adminOnly, getAllUsers);
 router.get('/admin/users/:id', protect, adminOnly, getUserById);
 router.put('/admin/users/:id', protect, adminOnly, adminUpdateUser);
 router.delete('/admin/users/:id', protect, adminOnly, adminDeleteUser);
+
+// Sales Report
 router.get('/admin/sales-report', protect, adminOnly, getSalesReport);
+
+// Admin Product Listing (paginated) ← NEW
+// Note: Create/Update/Delete remain in adminProductRoutes.js
+router.get('/admin/products-list', protect, adminOnly, adminGetProducts);
 
 export default router;

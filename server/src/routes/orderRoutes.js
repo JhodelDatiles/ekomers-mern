@@ -20,8 +20,8 @@ router.post('/webhook', handlePayMongoWebhook);
 // 2. Checkout session (GCash, Card, Maya, GrabPay)
 router.post('/checkout-session', protect, initiatePayMongoCheckout);
 
-// 3. Poll order status by paymentIntentId — frontend polls this after QR scan
-router.get('/by-intent/:paymentIntentId', protect, getOrderByPaymentIntent);
+// 3. Poll order status by paymentIntentId — public, session may expire at QR screen
+router.get('/by-intent/:paymentIntentId', getOrderByPaymentIntent);
 
 // 4. Fallback: confirm QR PH order if webhook didn't fire
 router.post('/confirm-qrph', protect, confirmQrPhOrder);

@@ -1,18 +1,158 @@
 import Order from '../models/orderSchema.js';
-import Product from '../models/productSchema.js'; // 👈 ADD THIS LINE
+import Product from '../models/productSchema.js';
 
-// GET /api/admin/orders - Get all orders across the platform
+// Helper: resolve date filter from period OR explicit from/to
+const getDateFilter = ({ period, dateFrom, dateTo }) => {
+  // Custom range takes priority
+  if (dateFrom || dateTo) {
+    const filter = {};
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      filter.$gte = from;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      filter.$lte = to;
+    }
+    return Object.keys(filter).length ? filter : null;
+  }
+
+  if (!period || period === 'all') return null;
+  const now  = new Date();
+  let from;
+  if (period === 'day') {
+    from = new Date(now);
+    from.setHours(0, 0, 0, 0);
+  } else if (period === 'week') {
+    from = new Date(now);
+    from.setDate(now.getDate() - 6);
+    from.setHours(0, 0, 0, 0);
+  } else if (period === 'month') {
+    from = new Date(now);
+    from.setDate(1);
+    from.setHours(0, 0, 0, 0);
+  } else {
+    return null;
+  }
+  return { $gte: from, $lte: now };
+};
+
+// GET /api/admin/orders/users
+export const getOrderUsers = async (req, res) => {
+  try {
+    const {
+      search   = '',
+      page     = 1,
+      limit    = 10,
+      period   = 'all',
+      dateFrom = '',
+      dateTo   = '',
+    } = req.query;
+
+    const pageNum  = Math.max(1, Number(page));
+    const limitNum = Math.min(100, Math.max(1, Number(limit)));
+    const skip     = (pageNum - 1) * limitNum;
+
+    const dateFilter = getDateFilter({ period, dateFrom, dateTo });
+
+    const basePipeline = [
+      ...(dateFilter ? [{ $match: { createdAt: dateFilter } }] : []),
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+      ...(search ? [{
+        $match: {
+          $or: [
+            { 'user.username': { $regex: search, $options: 'i' } },
+            { 'user.email':    { $regex: search, $options: 'i' } },
+          ]
+        }
+      }] : []),
+      {
+        $group: {
+          _id:         '$userId',
+          username:    { $first: '$user.username' },
+          email:       { $first: '$user.email' },
+          totalOrders: { $sum: 1 },
+          lastOrderAt: { $max: '$createdAt' },
+        }
+      },
+      { $sort: { lastOrderAt: -1 } },
+    ];
+
+    const [countResult, users] = await Promise.all([
+      Order.aggregate([...basePipeline, { $count: 'total' }]),
+      Order.aggregate([...basePipeline, { $skip: skip }, { $limit: limitNum }]),
+    ]);
+
+    const totalUsers = countResult[0]?.total || 0;
+
+    res.status(200).json({
+      users,
+      pagination: {
+        currentPage: pageNum,
+        totalPages:  Math.ceil(totalUsers / limitNum),
+        totalUsers,
+        limit:       limitNum,
+      },
+    });
+  } catch (error) {
+    console.error('getOrderUsers error:', error);
+    res.status(500).json({ message: 'Error fetching order users', error: error.message });
+  }
+};
+
+// GET /api/admin/orders/by-user/:userId
+export const getOrdersByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNum  = Math.max(1, Number(page));
+    const limitNum = Math.min(100, Math.max(1, Number(limit)));
+    const skip     = (pageNum - 1) * limitNum;
+
+    const [orders, totalOrders] = await Promise.all([
+      Order.find({ userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Order.countDocuments({ userId }),
+    ]);
+
+    res.status(200).json({
+      orders,
+      pagination: {
+        currentPage: pageNum,
+        totalPages:  Math.ceil(totalOrders / limitNum),
+        totalOrders,
+        limit:       limitNum,
+      },
+    });
+  } catch (error) {
+    console.error('getOrdersByUser error:', error);
+    res.status(500).json({ message: 'Error fetching user orders', error: error.message });
+  }
+};
+
+// GET /api/admin/orders — kept for backwards compat
 export const getAllOrders = async (req, res) => {
   try {
-    // Populate userId to get the name/email of the buyer
     const orders = await Order.find({})
-      .populate('userId', 'name email username') 
+      .populate('userId', 'name email username')
       .sort({ createdAt: -1 });
-
-    // Ensure we return an object with an 'orders' array to match your frontend logic
     res.status(200).json({ orders });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching orders", error: error.message });
+    res.status(500).json({ message: 'Error fetching orders', error: error.message });
   }
 };
 
@@ -20,33 +160,26 @@ export const updateOrderStatus = async (req, res) => {
   const { status } = req.body;
   try {
     const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // 🚀 STOCK RESTORATION LOGIC
-    // Only run if transitioning TO 'Cancelled' and not already there
     if (status === 'Cancelled' && order.status !== 'Cancelled') {
       console.log(`🛠️ Admin finalizing cancellation for ${order._id}. Restoring stock...`);
-      
-      // Create an array of update promises
       const stockUpdates = order.items.map(item => {
-        if (!item.productId) return Promise.resolve(); // Skip if productId is missing
-        
+        if (!item.productId) return Promise.resolve();
         return Product.updateOne(
-          { _id: item.productId, "sizes.size": item.size },
-          { $inc: { "sizes.$.stock": -item.quantity } }
+          { _id: item.productId, 'sizes.size': item.size },
+          { $inc: { 'sizes.$.stock': item.quantity } }
         );
       });
-
-      // Run all updates at once
       await Promise.all(stockUpdates);
-      console.log("✅ Stock restored successfully.");
+      console.log('✅ Stock restored successfully.');
     }
 
     order.status = status;
     await order.save();
     res.status(200).json(order);
   } catch (error) {
-    console.error("❌ UPDATE STATUS ERROR:", error);
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
+    console.error('❌ UPDATE STATUS ERROR:', error);
+    res.status(500).json({ message: 'Internal Server Error', error: error.message });
   }
 };
