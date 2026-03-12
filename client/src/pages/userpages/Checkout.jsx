@@ -89,9 +89,10 @@ const Checkout = () => {
           handleSuccess();
           return;
         }
+        // 'not_found' or 'pending' = still waiting, keep polling
 
-        // Step 2: If still pending after 10s, also check PayMongo directly as fallback
-        if (attempts >= 4) {
+        // Step 2: If still pending after ~6s, also check PayMongo directly as fallback
+        if (attempts >= 2) {
           const { status } = await paymentAPI.checkQrPhStatus(paymentIntentId);
           if (status === 'succeeded') {
             clearInterval(interval);
@@ -104,9 +105,7 @@ const Checkout = () => {
           }
         }
       } catch (err) {
-        if (err.response?.status !== 404) {
-          console.error("Polling error:", err.message);
-        }
+        console.error("Polling error:", err.message);
       }
     }, 3000);
     setPollingId(interval);

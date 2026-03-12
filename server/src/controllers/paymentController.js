@@ -1,7 +1,6 @@
 import {config} from '../envconfig.js';
 import Paymongo from 'paymongo';
 import Order from '../models/orderSchema.js';
-import PendingPayment from '../models/pendingPaymentSchema.js';
 import Cart from '../models/cartSchema.js';
 import Product from '../models/productSchema.js';
 import axios from 'axios';
@@ -324,14 +323,21 @@ console.log('🔍 matched items count:', selectedItems2.length);
     const attrs = attachRes.data.data.attributes;
     const qrImage = attrs.next_action?.code?.image_url || attrs.next_action?.data?.image_url;
 
-    await PendingPayment.create({
-      paymentIntentId,
+    // Save pending order with server-verified data.
+    // createdAt is intentionally NOT set here — it will be stamped when
+    // payment is confirmed (webhook or fallback), so the timestamp reflects
+    // when the user actually paid, not when the QR was generated.
+    await Order.create({
       userId,
-      items: orderItems,
+      paymentIntentId,
+      items: orderItems.map(i => ({ productId: i.productId, name: i.name, price: i.price, quantity: i.quantity, size: i.size, image: i.image })),
       totalAmount: serverTotal,
       shippingInfo,
-      isDirectPurchase: !isDirectPurchase ? false : true,
-      cartItemIds: selectedCartItemIds || []
+      paymentMethod: 'qrph',
+      paymentStatus: 'pending',
+      status: 'Pending',
+      isDirectPurchase: !!isDirectPurchase,
+      createdAt: null,  // will be overwritten on confirmation
     });
 
     console.log(`✅ QR PH pending order: ${paymentIntentId} (${orderItems.length} items, ₱${serverTotal})`);
