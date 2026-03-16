@@ -5,7 +5,7 @@ import { adminProductAPI, productAPI } from "../../services/api.js";
 import ProductFormModal from "../../components/modals/ProductFormModal.jsx";
 import ProductCategorySection from "../../components/ProductCategorySection.jsx";
 import ConfirmationModal from "../../components/modals/ConfirmationModal.jsx";
-import AdminPagination from "../../components/AdminPagination";
+import AdminPagination from "../../components/AdminPagination.jsx";
 
 const TableSkeleton = () => (
   <div className="space-y-12 animate-pulse">
