@@ -98,7 +98,7 @@ const UserManagement = () => {
   const [debouncedSearch, setDebouncedSearch]   = useState("");
   const [updatingUserId, setUpdatingUserId]     = useState(null);
   const [currentPage, setCurrentPage]           = useState(1);
-  const [pageSize, setPageSize]                 = useState(10); // ← default 10
+  const [pageSize, setPageSize]                 = useState(10);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(inputValue), 400);
