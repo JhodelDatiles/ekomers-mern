@@ -6,7 +6,7 @@ import {
 import toast from "react-hot-toast";
 import { adminUserAPI } from "../../services/api.js";
 import UserManagementSkeleton from "../../components/skeletons/adminskeletons/UserManagementSkeleton.jsx";
-import AdminPagination from "../../components/AdminPagination";
+import AdminPagination from "../../components/AdminPagination.jsx";
 
 // ─── UserRow ──────────────────────────────────────────────────────────────────
 const UserRow = React.memo(({ user, onRoleChange, onDelete, formatDate, getRoleBadgeClass, isUpdating }) => (
