@@ -23,7 +23,6 @@ export const getAllUsers = async (req, res) => {
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
     const skip = (pageNum - 1) * limitNum;
 
-    // Build filter query
     const query = {};
 
     if (role && role !== 'all') {
@@ -115,8 +114,6 @@ export const adminDeleteUser = async (req, res) => {
 // 2. ADMIN PRODUCT LISTING (with pagination)
 // ==========================================
 
-// GET /api/admin/products
-// Query params: page, limit, search, category
 export const adminGetProducts = async (req, res) => {
   try {
     const {
@@ -152,7 +149,6 @@ export const adminGetProducts = async (req, res) => {
       Product.countDocuments(query),
     ]);
 
-    // Group by category for the frontend's category-section layout
     const grouped = products.reduce((acc, product) => {
       const cat = product.category || 'Uncategorized';
       if (!acc[cat]) acc[cat] = [];

@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { 
   Search, Store, ShoppingBag, Heart, Palette, Check, 
   LayoutDashboard, Boxes, ShoppingCart, Package, X, ShoppingBasket,
   Users, TrendingUp, Settings, Globe, ShieldCheck, Home, Layout,
-  User as UserIcon, MapPin, Lock, ChevronDown
+  User as UserIcon, MapPin, Lock, ChevronDown, Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api, { authAPI } from '../services/api'; 
+import api, { authAPI, productAPI } from '../services/api'; 
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext'; 
 import { useWishlist } from '../context/WishlistContext'; 
@@ -21,6 +21,71 @@ const Navbar = () => {
   const { wishlist } = useWishlist(); 
   
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [allProducts, setAllProducts] = useState([]);
+  const searchRef = useRef(null);
+  const mobileSearchRef = useRef(null);
+
+  // Sync search input with URL — clears when navigating away from home
+  useEffect(() => {
+    setSearchQuery(searchParams.get("search") || "");
+  }, [searchParams]);
+
+  // Fetch all products once for live autocomplete
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const res = await productAPI.getProducts({ limit: 200 });
+        setAllProducts(res?.products || []);
+      } catch (err) { console.error("Navbar: product fetch error", err); }
+    };
+    fetchAll();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        searchRef.current && !searchRef.current.contains(e.target) &&
+        mobileSearchRef.current && !mobileSearchRef.current.contains(e.target)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Live filtered suggestions — same useMemo pattern as AdminOrders
+  const suggestions = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (!term) return [];
+    return allProducts
+      .filter(p =>
+        p.name?.toLowerCase().includes(term) ||
+        p.category?.toLowerCase().includes(term)
+      )
+      .slice(0, 6);
+  }, [searchQuery, allProducts]);
+
+  const handleSelectSuggestion = (product) => {
+    setSearchQuery(product.name);
+    setShowSuggestions(false);
+    navigate(`/?search=${encodeURIComponent(product.name)}`);
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setShowSuggestions(false);
+    navigate(searchQuery.trim() ? `/?search=${encodeURIComponent(searchQuery.trim())}` : '/');
+  };
+
+  const handleClear = () => {
+    setSearchQuery("");
+    setShowSuggestions(false);
+    navigate("/");
+  };
+
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [storeSettings, setStoreSettings] = useState({ name: "MN+LA", logo: null });
   const [isNavSettingsOpen, setIsNavSettingsOpen] = useState(false);
@@ -77,7 +142,8 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="navbar bg-base-100 shadow-md sticky top-0 z-50 px-4 md:px-8 font-sans border-b border-base-200">
+    <div className="bg-base-100 shadow-md sticky top-0 z-50 border-b border-base-200 font-sans">
+    <nav className="navbar px-4 md:px-8">
       <div className="navbar-start">
         <Link to="/" className="flex items-center gap-2 group">
           {storeSettings.logo?.url ? (
@@ -92,16 +158,57 @@ const Navbar = () => {
       </div>
 
       <div className="navbar-center hidden lg:flex">
-        <form onSubmit={(e) => { e.preventDefault(); navigate(searchQuery ? `/?search=${searchQuery}` : '/'); }} className="relative group">
-          <input
-            type="text"
-            placeholder="Search products..."
-            className="input input-bordered input-sm w-64 md:w-80 rounded-full pl-10 bg-base-200 border-none focus:ring-2 ring-primary transition-all outline-none"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40" />
-        </form>
+        <div ref={searchRef} className="relative">
+          <form onSubmit={handleSearchSubmit}>
+            <input
+              type="text"
+              placeholder="Search products..."
+              className="input input-bordered input-sm w-64 md:w-80 rounded-full pl-10 pr-8 bg-base-200 border-none focus:ring-2 ring-primary transition-all outline-none"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+              onFocus={() => { if (searchQuery.trim()) setShowSuggestions(true); }}
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40" />
+            {searchQuery && (
+              <button type="button" onClick={handleClear} className="absolute right-3 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-base-content transition-colors">
+                <X size={13} />
+              </button>
+            )}
+          </form>
+          {/* Live suggestions dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute top-full mt-2 w-full bg-base-100 border border-base-200 rounded-2xl shadow-2xl overflow-hidden z-[70]">
+              {suggestions.map((product) => (
+                <button
+                  key={product._id}
+                  onMouseDown={() => handleSelectSuggestion(product)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-base-200 transition-colors text-left group"
+                >
+                  <img
+                    src={product.images?.[0]?.url || "/placeholder.png"}
+                    alt=""
+                    className="w-8 h-8 object-cover rounded-lg bg-base-200 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black uppercase italic truncate">{product.name}</p>
+                    <p className="text-[9px] opacity-40 font-bold uppercase flex items-center gap-1">
+                      <Tag size={8} /> {product.category}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-black text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                    ₱{Number(product.price).toLocaleString()}
+                  </span>
+                </button>
+              ))}
+              <button
+                onMouseDown={handleSearchSubmit}
+                className="w-full px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-primary border-t border-base-200 hover:bg-primary/5 transition-colors text-center"
+              >
+                See all results for "{searchQuery}"
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="navbar-end gap-1 md:gap-2">
@@ -273,6 +380,61 @@ const Navbar = () => {
         </div>
       </div>
     </nav>
+    {/* MOBILE SEARCH BAR — visible below lg */}
+      <div className="lg:hidden px-4 py-2 border-t border-base-200">
+        <div ref={mobileSearchRef} className="relative">
+          <form onSubmit={handleSearchSubmit}>
+            <input
+              type="text"
+              placeholder="Search products..."
+              className="input input-bordered input-sm w-full rounded-full pl-10 pr-8 bg-base-200 border-none focus:ring-2 ring-primary transition-all outline-none"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+              onFocus={() => { if (searchQuery.trim()) setShowSuggestions(true); }}
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-40" />
+            {searchQuery && (
+              <button type="button" onClick={handleClear} className="absolute right-3 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-base-content transition-colors">
+                <X size={13} />
+              </button>
+            )}
+          </form>
+          {/* Live suggestions dropdown — mobile */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute top-full mt-2 w-full bg-base-100 border border-base-200 rounded-2xl shadow-2xl overflow-hidden z-[70]">
+              {suggestions.map((product) => (
+                <button
+                  key={product._id}
+                  onMouseDown={() => handleSelectSuggestion(product)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-base-200 transition-colors text-left group"
+                >
+                  <img
+                    src={product.images?.[0]?.url || "/placeholder.png"}
+                    alt=""
+                    className="w-8 h-8 object-cover rounded-lg bg-base-200 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-black uppercase italic truncate">{product.name}</p>
+                    <p className="text-[9px] opacity-40 font-bold uppercase flex items-center gap-1">
+                      <Tag size={8} /> {product.category}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-black text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                    ₱{Number(product.price).toLocaleString()}
+                  </span>
+                </button>
+              ))}
+              <button
+                onMouseDown={handleSearchSubmit}
+                className="w-full px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-primary border-t border-base-200 hover:bg-primary/5 transition-colors text-center"
+              >
+                See all results for "{searchQuery}"
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

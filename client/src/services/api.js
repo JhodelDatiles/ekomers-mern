@@ -339,8 +339,8 @@ export const reviewAPI = {
 
 // Admin User API
 export const adminUserAPI = {
-  getAllUsers: async () => {
-    const response = await api.get('/admin/users');
+  getAllUsers: async (params = {}) => {
+    const response = await api.get('/admin/users', { params });
     return response.data;
   },
   getUserById: async (id) => {
@@ -371,6 +371,10 @@ export const settingsAPI = {
 
 // Admin Product API
 export const adminProductAPI = {
+  getProducts: async (params = {}) => {
+    const response = await api.get('/admin/products-list', { params });
+    return response.data;
+  },
   createProduct: async (productData) => {
     const response = await api.post('/admin/products', productData);
     return response.data;

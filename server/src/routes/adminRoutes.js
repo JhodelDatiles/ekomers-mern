@@ -4,14 +4,13 @@ import {
   getStoreSettings, updateStoreSettings, getSalesReport, adminGetProducts
 } from '../controllers/adminController.js';
 import { protect, adminOnly } from '../middlewares/protect.js';
-import { upload } from '../config/cloudinary.js'; // Ensure this points to your multer-cloudinary config
+import { upload } from '../config/cloudinary.js';
 
 const router = express.Router();
 
 // Publicly accessible
 router.get('/settings', getStoreSettings);
 
-// CRITICAL FIX: Added upload.single('logo') middleware here
 router.put('/settings', protect, adminOnly, upload.single('logo'), updateStoreSettings);
 
 // User Management
@@ -23,8 +22,7 @@ router.delete('/admin/users/:id', protect, adminOnly, adminDeleteUser);
 // Sales Report
 router.get('/admin/sales-report', protect, adminOnly, getSalesReport);
 
-// Admin Product Listing (paginated) ← NEW
-// Note: Create/Update/Delete remain in adminProductRoutes.js
+// Admin Product Listing (paginated)
 router.get('/admin/products-list', protect, adminOnly, adminGetProducts);
 
 export default router;
