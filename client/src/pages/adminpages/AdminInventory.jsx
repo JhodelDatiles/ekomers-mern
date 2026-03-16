@@ -31,7 +31,7 @@ const AdminProducts = () => {
   const [loading, setLoading]                 = useState(true);
   const [searchQuery, setSearchQuery]         = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [categoryFilter, setCategoryFilter]   = useState(""); // ← NEW
+  const [categoryFilter, setCategoryFilter]   = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedIds, setSelectedIds]         = useState([]);
   const [currentPage, setCurrentPage]         = useState(1);
@@ -55,7 +55,7 @@ const AdminProducts = () => {
           page: currentPage,
           limit: pageSize,
           search: debouncedSearch,
-          category: categoryFilter,   // ← passed to backend
+          category: categoryFilter,
         }),
         productAPI.getCategories(),
       ]);
@@ -156,7 +156,7 @@ const AdminProducts = () => {
               />
             </div>
 
-            {/* Category filter ← NEW */}
+            {/* Category filter */}
             <div className="relative w-full md:w-48">
               <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 opacity-30 pointer-events-none" />
               <select
