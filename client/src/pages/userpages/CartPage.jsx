@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import toast from 'react-hot-toast';
 import CartSkeleton from "../../components/skeletons/CartSkeleton";
+import ConfirmationModal from "../../components/modals/ConfirmationModal";
 
 const CartPage = () => {
   const { cart, updateQuantity, removeFromCart, loading: cartLoading } = useCart();
@@ -16,6 +17,7 @@ const CartPage = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [processingId, setProcessingId] = useState(null);
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, isBulk: false, id: null });
 
   const cartItems = useMemo(() => cart?.items || [], [cart?.items]);
 
@@ -59,10 +61,14 @@ const CartPage = () => {
     }
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm("PURGE SELECTED ITEMS?")) return;
+    setConfirmConfig({ isOpen: true, isBulk: true, id: null });
+  };
+
+  const executeBulkDelete = async () => {
     setIsDeleting(true);
+    setConfirmConfig({ isOpen: false, isBulk: false, id: null });
     const deletePromise = Promise.all(selectedIds.map(id => removeFromCart(id)));
     toast.promise(deletePromise, {
       loading: 'Purging inventory...',
@@ -77,7 +83,13 @@ const CartPage = () => {
     }
   };
 
-  const handleSingleDelete = async (id) => {
+  const handleSingleDelete = (id) => {
+    setConfirmConfig({ isOpen: true, isBulk: false, id });
+  };
+
+  const executeSingleDelete = async () => {
+    const { id } = confirmConfig;
+    setConfirmConfig({ isOpen: false, isBulk: false, id: null });
     const deletePromise = removeFromCart(id);
     toast.promise(deletePromise, {
       loading: 'Removing item...',
@@ -201,6 +213,19 @@ const CartPage = () => {
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.isBulk ? "Purge Selected Items" : "Remove Item"}
+        message={
+          confirmConfig.isBulk
+            ? `You are about to permanently remove ${selectedIds.length} item${selectedIds.length > 1 ? 's' : ''} from your cart. This cannot be undone.`
+            : "Are you sure you want to remove this item from your cart?"
+        }
+        loading={isDeleting}
+        onConfirm={confirmConfig.isBulk ? executeBulkDelete : executeSingleDelete}
+        onCancel={() => setConfirmConfig({ isOpen: false, isBulk: false, id: null })}
+      />
     </div>
   );
 };
