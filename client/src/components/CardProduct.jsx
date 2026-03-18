@@ -96,7 +96,7 @@ const ProductCard = ({ product, onQuickView }) => {
         </div>
 
         <div className="flex justify-between items-center mt-auto">
-          <p className="text-xl font-black text-primary italic">₱{product.basePrice?.toLocaleString()}</p>
+          <p className="text-xl font-black text-primary italic">₱{product.sizes?.[0]?.price}</p>
           <button 
             onClick={handleAddToCart}
             className="btn btn-primary btn-sm btn-circle shadow-lg"
