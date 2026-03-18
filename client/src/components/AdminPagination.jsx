@@ -4,7 +4,6 @@ const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50, 100];
 
 /**
  * Reusable server-side pagination component with page size selector.
- *
  * Props:
  *  currentPage   – number
  *  totalPages    – number
@@ -113,7 +112,7 @@ const AdminPagination = ({
         </div>
       )}
     </div>
-  );          // random commentgit 
+  );
 };
 
 export default AdminPagination;
