@@ -20,6 +20,8 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import mapRoutes from './routes/map.js'; 
 import wishlistRoutes from './routes/wishlistRoutes.js'; 
+import chatRoutes from './routes/chatRoutes.js';
+
 
 const app = express();
 app.set('trust proxy', 1); // Allows cookies to be secure over ngrok
@@ -94,6 +96,8 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/map', mapRoutes); 
+app.use('/api/chat', chatRoutes);
+
 
 // 5. ADMIN SPECIFIC ROUTES (Structured for clarity)
 app.use('/api/admin/products', adminProductRoutes);

@@ -23,6 +23,8 @@ import Login from "./pages/LoginPage.jsx";
 import Register from "./pages/RegisterPage.jsx";
 import VerifyEmail from "./pages/VerifyEmail.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ChatWidget from './components/ChatWidget.jsx';
+
 
 // BLOCK 4: ADMIN PAGES
 import AdminDashboardOverview from "./pages/adminpages/AdminDashboardOverview.jsx";
@@ -181,6 +183,7 @@ function App() {
               {/* 404 HANDLER */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            <ChatWidget />
           </Router>
         </WishlistProvider>
       </CartProvider>
