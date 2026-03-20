@@ -96,27 +96,24 @@ export const handlePayMongoWebhook = async (req, res) => {
   try {
     const signature = req.headers['paymongo-signature'];
     const webhookSecret = config.paymongoWebhooks;
-    const payload = req.rawBody; // Captured as Buffer in server.js
+    const payload = req.rawBody;
 
-    // 1. Validate existence of required data
     if (!signature || !payload) {
       console.error("❌ Webhook Error: Missing signature header or raw body");
       return res.status(400).send('Missing Data');
     }
 
     if (!webhookSecret) {
-      console.error("❌ Config Error: PAYMONGO_WEBHOOK_SECRET is undefined. Check Render Env Vars.");
+      console.error("❌ Config Error: PAYMONGO_WEBHOOK_SECRET is undefined.");
       return res.status(500).send('Server Configuration Error');
     }
 
-    // 2. Extract components from PayMongo signature header
     const parts = signature.split(',');
     const timestamp = parts.find(p => p.startsWith('t='))?.split('=')[1];
     const testHash = parts.find(p => p.startsWith('te='))?.split('=')[1];
     const liveHash = parts.find(p => p.startsWith('li='))?.split('=')[1];
     const paymongoHash = liveHash || testHash;
 
-    // 3. Verify Signature
     const baseString = `${timestamp}.${payload}`;
     const calculatedHash = crypto
       .createHmac('sha256', webhookSecret)
@@ -125,12 +122,9 @@ export const handlePayMongoWebhook = async (req, res) => {
 
     if (calculatedHash !== paymongoHash) {
       console.error("❌ Security: Invalid Webhook Signature Match");
-      // Logging first/last 4 chars for debugging without exposing full secret
-      console.log(`Debug: Calc[${calculatedHash.slice(0,4)}...] vs PayM[${paymongoHash.slice(0,4)}...]`);
       return res.status(401).send('Invalid signature');
     }
 
-    // 4. Handle successful payment
     const eventAttr = req.body.data.attributes;
     if (eventAttr.type === 'checkout_session.payment.paid') {
       const session = eventAttr.data.attributes;
@@ -138,7 +132,6 @@ export const handlePayMongoWebhook = async (req, res) => {
 
       console.log(`📦 Processing Order for User: ${userId}, cartItemIds: ${cartItemIds}`);
 
-      // Check for duplicate processing
       const existingOrder = await Order.findOne({ checkoutSessionId: session.id });
       if (existingOrder) {
         console.log("⚠️ Order already exists for this session.");
@@ -149,7 +142,6 @@ export const handlePayMongoWebhook = async (req, res) => {
       let totalAmount = 0;
 
       if (cartItemIds === "DIRECT_BUY" && directItemData) {
-        // ── DIRECT / BUY NOW ──
         const rawData = JSON.parse(directItemData);
         orderItems = rawData.map(item => ({
           productId: item.pId,
@@ -161,7 +153,6 @@ export const handlePayMongoWebhook = async (req, res) => {
         }));
         totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
       } else {
-        // ── CART CHECKOUT — only use selected items ──
         const targetIds = cartItemIds ? cartItemIds.split(',') : [];
         const cart = await Cart.findOne({ userId }).populate('items.productId');
 
@@ -170,10 +161,9 @@ export const handlePayMongoWebhook = async (req, res) => {
           return res.status(200).json({ received: true });
         }
 
-        // Filter to only the selected items
         const purchasedItems = targetIds.length > 0
           ? cart.items.filter(item => targetIds.includes(item._id.toString()))
-          : cart.items; // fallback: all items if no IDs (shouldn't happen)
+          : cart.items;
 
         if (purchasedItems.length === 0) {
           console.error("❌ No matching cart items found for IDs:", targetIds);
@@ -190,12 +180,10 @@ export const handlePayMongoWebhook = async (req, res) => {
         }));
         totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
-        // Only remove the purchased items from cart
         await Cart.findOneAndUpdate(
           { userId },
           { $pull: { items: { _id: { $in: targetIds } } } }
         );
-        // Recalculate cart total
         const updatedCart = await Cart.findOne({ userId });
         if (updatedCart) {
           updatedCart.totalAmount = updatedCart.items.reduce((acc, i) => acc + i.quantity * i.price, 0);
@@ -218,7 +206,6 @@ export const handlePayMongoWebhook = async (req, res) => {
         status: 'Order in Progress'
       });
 
-      // Deduct stock for purchased items only
       for (const item of orderItems) {
         await Product.updateOne(
           { _id: item.productId, "sizes.size": item.size },
@@ -258,13 +245,10 @@ export const confirmDelivery = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
-
-    order.status = "Delivered"; // This must exist in the schema enum!
-    
+    order.status = "Delivered";
     await order.save();
     res.status(200).json(order);
   } catch (error) {
-    // If validation fails, it will hit this block
     console.error("Validation Error:", error.message);
     res.status(500).json({ message: error.message });
   }
@@ -279,43 +263,134 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────
+// CANCEL ORDER — auto-approve, restore stock, trigger PayMongo refund
+// User can cancel anytime before shipment is arranged
+// ─────────────────────────────────────────────────────────────────
 export const cancelOrder = async (req, res) => {
   try {
+    const { reason } = req.body;
+
+    // Validate reason is provided
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "Cancellation reason is required." });
+    }
+
     const order = await Order.findOne({ 
       _id: req.params.id, 
       userId: req.user.id 
     });
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found" });
+      return res.status(404).json({ message: "Order not found." });
     }
 
-    // Prevent cancellation if order is already far along
-    const protectedStatuses = ['shipped', 'shipped/in transit', 'out for delivery', 'completed'];
-    if (protectedStatuses.includes(order.status.toLowerCase())) {
+    // Block cancellation if already shipped or beyond
+    const blockedStatuses = [
+      'Shipped/In Transit', 
+      'Out for Delivery', 
+      'Delivered', 
+      'Completed', 
+      'Cancelled'
+    ];
+    if (blockedStatuses.includes(order.status)) {
       return res.status(400).json({ 
-        message: "Order cannot be cancelled as it is already being processed/shipped." 
+        message: "Cannot cancel — order has already been shipped or completed." 
       });
     }
 
-    // 🎯 USER ONLY REQUESTS CANCELLATION
-    // We do NOT restore stock here.
-    order.status = 'Cancellation Requested'; 
+    // ── 1. RESTORE STOCK ──
+    const stockUpdates = order.items.map(item => {
+      if (!item.productId) return Promise.resolve();
+      return Product.updateOne(
+        { _id: item.productId, "sizes.size": item.size },
+        { $inc: { "sizes.$.stock": item.quantity } } // +quantity to restore
+      );
+    });
+    await Promise.all(stockUpdates);
+    console.log(`✅ Stock restored for order ${order._id}`);
+
+    // ── 2. PAYMONGO REFUND (only for supported payment methods) ──
+    // QR PH (InstaPay/PESONet) and GrabPay cannot be refunded via API.
+    // Those require manual bank transfer back to the customer.
+    const AUTO_REFUNDABLE = ['gcash', 'paymaya', 'card'];
+    const canAutoRefund = order.paymentStatus === 'paid' && AUTO_REFUNDABLE.includes(order.paymentMethod);
+    const needsManualRefund = order.paymentStatus === 'paid' && !canAutoRefund;
+
+    let refundId = null;
+
+    if (canAutoRefund) {
+      try {
+        const secretKey = config.paymongoSecret.trim();
+        const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
+
+        // Get the actual payment ID from the checkout session
+        let paymentId = null;
+        if (order.checkoutSessionId) {
+          const sessionRes = await axios.get(
+            `https://api.paymongo.com/v1/checkout_sessions/${order.checkoutSessionId}`,
+            { headers: { authorization: authHeader } }
+          );
+          const payments = sessionRes.data.data.attributes.payments;
+          if (payments && payments.length > 0) {
+            paymentId = payments[0].id;
+          }
+        }
+
+        if (paymentId) {
+          const refundRes = await axios.post(
+            'https://api.paymongo.com/v1/refunds',
+            {
+              data: {
+                attributes: {
+                  amount: Math.round(order.totalAmount * 100),
+                  payment_id: paymentId,
+                  reason: 'others',
+                  notes: reason.trim()
+                }
+              }
+            },
+            { headers: { authorization: authHeader, 'Content-Type': 'application/json' } }
+          );
+          refundId = refundRes.data.data.id;
+          console.log(`💸 PayMongo refund triggered: ${refundId} for order ${order._id}`);
+        } else {
+          console.warn(`⚠️ Could not find payment ID for order ${order._id} — refund skipped`);
+        }
+      } catch (refundErr) {
+        console.error(`❌ PayMongo refund failed for order ${order._id}:`, refundErr.response?.data || refundErr.message);
+      }
+    } else if (needsManualRefund) {
+      // QR PH / GrabPay — log it so admin knows to refund manually
+      console.log(`⚠️ Manual refund required for order ${order._id} (method: ${order.paymentMethod}, amount: ₱${order.totalAmount})`);
+    }
+
+    // ── 3. UPDATE ORDER ──
+    order.status = 'Cancelled';
+    order.paymentStatus = refundId ? 'refunded' : (needsManualRefund ? 'refund_pending' : order.paymentStatus);
+    order.cancellationReason = reason.trim();
+    order.cancelledAt = new Date();
+    order.refundId = refundId;
     await order.save();
 
+    console.log(`✅ Order ${order._id} cancelled. Reason: "${reason}". Refund: ${refundId || (needsManualRefund ? 'MANUAL REQUIRED' : 'N/A')}`);
+
     res.status(200).json({ 
-      message: "Cancellation request sent to admin.", 
-      order 
+      message: "Order cancelled successfully.",
+      refundTriggered: !!refundId,
+      needsManualRefund,
+      refundId,
+      order
     });
+
   } catch (error) {
     console.error("❌ CANCEL ERROR:", error);
-    res.status(500).json({ message: "Failed to request cancellation" });
+    res.status(500).json({ message: "Failed to cancel order." });
   }
 };
+
 // ─────────────────────────────────────────────────────────────────
 // CONFIRM QR PH ORDER — frontend fallback after polling succeeds
-// SECURITY: never trusts frontend data — looks up pending order
-// created server-side in createQrPhPayment
 // ─────────────────────────────────────────────────────────────────
 export const confirmQrPhOrder = async (req, res) => {
   try {
@@ -326,7 +401,6 @@ export const confirmQrPhOrder = async (req, res) => {
       return res.status(400).json({ message: 'paymentIntentId required' });
     }
 
-    // 1. Verify payment with PayMongo server-to-server
     const secretKey = config.paymongoSecret.trim();
     const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}`;
     const intentRes = await axios.get(
@@ -357,20 +431,14 @@ export const confirmQrPhOrder = async (req, res) => {
         console.log(`✅ Order already confirmed (webhook was first): ${pendingOrder._id}`);
         return res.status(200).json({ order: pendingOrder, alreadyConfirmed: true });
       }
-      // Stamp createdAt to actual payment time (bypass Mongoose timestamps: true
-      // which ignores direct assignment to createdAt on .save())
-      await Order.updateOne(
-        { _id: pendingOrder._id },
-        { $set: { paymentStatus: 'paid', status: 'Order in Progress', createdAt: new Date() } }
-      );
       pendingOrder.paymentStatus = 'paid';
       pendingOrder.status = 'Order in Progress';
+      await pendingOrder.save();
     } else {
       console.error(`❌ No order found for ${paymentIntentId} but payment succeeded`);
       return res.status(200).json({ message: 'Payment confirmed but order record missing. Please contact support.', alreadyConfirmed: true });
     }
 
-    // Deduct stock
     for (const item of pendingOrder.items) {
       if (item.productId && item.size) {
         await Product.updateOne(
@@ -380,7 +448,6 @@ export const confirmQrPhOrder = async (req, res) => {
       }
     }
 
-    // Remove purchased items from cart (skip for direct/buy-now)
     if (!pendingOrder.isDirectPurchase) {
       const paidProductIds = pendingOrder.items.map(i => String(i.productId));
       await Cart.findOneAndUpdate(
@@ -410,11 +477,15 @@ export const confirmQrPhOrder = async (req, res) => {
   }
 };
 
+// Poll order status by paymentIntentId
 export const getOrderByPaymentIntent = async (req, res) => {
   try {
     const { paymentIntentId } = req.params;
-    const order = await Order.findOne({ paymentIntentId });
-    if (!order) return res.status(200).json({ status: 'not_found' });
+    const order = await Order.findOne({ 
+      paymentIntentId, 
+      userId: req.user.id
+    });
+    if (!order) return res.status(404).json({ status: 'pending' });
     res.status(200).json({ status: order.paymentStatus, orderId: order._id });
   } catch (error) {
     res.status(500).json({ message: 'Error checking order status' });
