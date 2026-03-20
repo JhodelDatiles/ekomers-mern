@@ -11,7 +11,7 @@ import { Toaster, ToastBar } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { WishlistProvider } from "./context/WishlistContext.jsx";
 import { CartProvider } from "./context/CartContext.jsx";
-import { SocketProvider } from "./context/SocketContext.jsx";
+import { SocketProvider } from "./context/Socketcontext.jsx";
 import api from "./services/api";
 import ProtectedRoutes from "./components/ProtectedRoutes.jsx";
 
@@ -34,7 +34,7 @@ import AdminSettings from "./pages/adminpages/AdminSettings.jsx";
 import AdminConfiguration from "./pages/adminpages/AdminConfiguration.jsx";
 import AdminPrivacySettings from "./pages/adminpages/AdminPrivacySettings.jsx";
 import SalesReport from "./pages/adminpages/SalesReport.jsx";
-import AdminChatPage from "./pages/adminpages/AdminChatPage.jsx";
+import AdminChatPage from "./pages/adminpages/Adminchatpage.jsx";
 
 // BLOCK 5: USER PAGES
 import UnifiedDashboard from "./pages/UnifiedDashboard.jsx";
@@ -51,7 +51,7 @@ import Checkout from "./pages/userpages/Checkout.jsx";
 import PaymentSuccess from "./pages/userpages/PaymentSuccess.jsx";
 
 // BLOCK 7: AI CHAT WIDGET
-import AIChatWidget from "./components/AIChatWidget.jsx";
+import AIChatWidget from "./components/Aichatwidget.jsx";
 
 // ── Inner component keeps useEffect inside Router context ──
 function AppInner() {
