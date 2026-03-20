@@ -1,4 +1,4 @@
-import Conversation from '../models/conversationSchema.js';
+import Conversation from '../models/Conversationschema.js';
 import Message from '../models/Messageschema.js';
 import Order from '../models/orderSchema.js';
 
