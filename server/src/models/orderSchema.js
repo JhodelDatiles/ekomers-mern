@@ -8,7 +8,7 @@ const orderSchema = new mongoose.Schema(
       default: () => `ORD-${Math.floor(100000 + Math.random() * 900000)}` 
     },
     checkoutSessionId: { type: String },
-    paymentIntentId: { type: String }, // ← QR PH orders use this
+    paymentIntentId: { type: String },
     userId: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: 'User', 
@@ -37,7 +37,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentStatus: { 
       type: String, 
-      enum: ['pending', 'paid', 'failed'], 
+      enum: ['pending', 'paid', 'failed', 'refunded', 'refund_pending'], 
       default: 'pending' 
     },
     status: { 
@@ -47,13 +47,26 @@ const orderSchema = new mongoose.Schema(
         'Order in Progress', 
         'Shipped/In Transit', 
         'Out for Delivery', 
-        'Delivered', // <--- ADD THIS EXACTLY
-        'Completed', // 🚀 ADDED THIS
-        'Cancelled', // 🚀 ADDED THIS
+        'Delivered',
+        'Completed',
+        'Cancelled',
         'Exception/Failed',
-        'Cancellation Requested' // 👈 ADD THIS LINE EXACTLY
+        'Cancellation Requested'
       ], 
       default: 'Pending' 
+    },
+    // ── CANCELLATION FIELDS ──
+    cancellationReason: { 
+      type: String, 
+      default: null 
+    },
+    cancelledAt: { 
+      type: Date, 
+      default: null 
+    },
+    refundId: { 
+      type: String, 
+      default: null  // PayMongo refund ID for reference
     },
     totalAmount: { type: Number, required: true },
     waybillId: { 
@@ -65,9 +78,5 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-orderSchema.index({ userId: 1, createdAt: -1 });       // getUserOrders query
-orderSchema.index({ checkoutSessionId: 1 }, { sparse: true }); // webhook dedup
-orderSchema.index({ paymentIntentId: 1 }, { sparse: true });   // QR PH polling
 const Order = mongoose.model('Order', orderSchema);
-
 export default Order;

@@ -255,8 +255,8 @@ export const orderAPI = {
     const response = await api.put(`/orders/${orderId}/confirm-delivery`);
     return response.data;
   },
-  cancelOrder: async (orderId) => {
-    const response = await api.put(`/orders/${orderId}/cancel`);
+  cancelOrder: async (orderId, reason) => {
+    const response = await api.put(`/orders/${orderId}/cancel`, { reason });
     return response.data;
   },
   confirmQrPhOrder: async ({ paymentIntentId }) => {
@@ -475,4 +475,46 @@ export const adminSalesAPI = {
   },
 };
 
+export const chatAPI = {
+  // Get or create a conversation for a specific order
+  getOrCreateConversation: async (orderId) => {
+    const response = await api.post('/chat/conversations', { orderId });
+    return response.data;
+  },
+  // Get all conversations for the logged-in user
+  getUserConversations: async () => {
+    const response = await api.get('/chat/conversations');
+    return response.data;
+  },
+  // Admin: get all conversations across all users
+  getAllConversations: async () => {
+    const response = await api.get('/chat/admin/conversations');
+    return response.data;
+  },
+  // Get messages for a conversation
+  getMessages: async (conversationId) => {
+    const response = await api.get(`/chat/conversations/${conversationId}/messages`);
+    return response.data;
+  },
+  // Send a message
+  sendMessage: async (conversationId, content) => {
+    const response = await api.post(`/chat/conversations/${conversationId}/messages`, { content });
+    return response.data;
+  },
+  // Mark conversation as read
+  markAsRead: async (conversationId) => {
+    const response = await api.put(`/chat/conversations/${conversationId}/read`);
+    return response.data;
+  },
+  // Admin: close a conversation
+  closeConversation: async (conversationId) => {
+    const response = await api.put(`/chat/admin/conversations/${conversationId}/close`);
+    return response.data;
+  },
+  // Get unread message count
+  getUnreadCount: async () => {
+    const response = await api.get('/chat/unread-count');
+    return response.data;
+  },
+};
 export default api;

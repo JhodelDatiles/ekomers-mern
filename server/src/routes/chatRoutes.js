@@ -1,10 +1,31 @@
 import express from 'express';
-import { protect } from '../middlewares/protect.js';
-import { chat } from '../controllers/chatController.js';
+import {
+  getOrCreateConversation,
+  getUserConversations,
+  getAllConversations,
+  getMessages,
+  sendMessage,
+  markAsRead,
+  closeConversation,
+  getUnreadCount
+} from '../controllers/chatController.js';
+import { protect, adminOnly } from '../middlewares/protect.js';
 
 const router = express.Router();
 
-// POST /api/chat — protected, requires login
-router.post('/', protect, chat);
+// All routes require auth
+router.use(protect);
+
+// User routes
+router.post('/conversations', getOrCreateConversation);
+router.get('/conversations', getUserConversations);
+router.get('/conversations/:id/messages', getMessages);
+router.post('/conversations/:id/messages', sendMessage);
+router.put('/conversations/:id/read', markAsRead);
+router.get('/unread-count', getUnreadCount);
+
+// Admin routes
+router.get('/admin/conversations', adminOnly, getAllConversations);
+router.put('/admin/conversations/:id/close', adminOnly, closeConversation);
 
 export default router;
