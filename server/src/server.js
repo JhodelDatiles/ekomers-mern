@@ -1,10 +1,13 @@
 import { config } from './envconfig.js';
 import express from 'express';
+import { createServer } from 'http';
+import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import conn from './config/db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { initSocket } from './config/Chatsocket.js';
 
 // Import routes
 import authRoutes from './routes/authRoutes.js';
@@ -19,12 +22,15 @@ import adminOrderRoutes from './routes/adminOrderRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import mapRoutes from './routes/map.js'; 
-import wishlistRoutes from './routes/wishlistRoutes.js'; 
+import wishlistRoutes from './routes/wishlistRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import aiChatRoutes from './routes/Aichatroutes.js';
 
+dotenv.config();
 
 const app = express();
-app.set('trust proxy', 1); // Allows cookies to be secure over ngrok
+const httpServer = createServer(app); // Wrap express in http server for Socket.IO
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 const __filename = fileURLToPath(import.meta.url);
@@ -62,24 +68,15 @@ app.use(cors({
   exposedHeaders: ['set-cookie']
 }));
 
-// 2. BODY PARSING & WEBHOOK RAW BODY CAPTURE
-// app.use(express.json({
-//   verify: (req, res, buf) => {
-//     // Check if the URL matches your webhook path
-//     if (req.originalUrl.includes('/api/orders/webhook')) {
-//       // DO NOT use .toString() here yet. Store the raw buffer.
-//       req.rawBody = buf; 
-//     }
-//   }
-// }));
+// 2. BODY PARSING
 app.use(express.json({
   verify: (req, res, buf) => {
-    req.rawBody = buf.toString(); // Stores the unparsed body for the webhook
+    req.rawBody = buf.toString();
   }
 }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
- 
+
 // 3. HEALTH CHECK
 app.get('/api/health', (req, res) => {
   res.json({ message: 'E-commerce API is running!', mode: isProduction ? 'production' : 'development'});
@@ -95,18 +92,16 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payment', paymentRoutes);
-app.use('/api/map', mapRoutes); 
+app.use('/api/map', mapRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/ai-chat', aiChatRoutes);
 
-
-// 5. ADMIN SPECIFIC ROUTES (Structured for clarity)
+// 5. ADMIN SPECIFIC ROUTES
 app.use('/api/admin/products', adminProductRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
-// adminRoutes LAST - it handles /api/settings and /api/admin/users
-// Must be after all other specific routes to avoid conflicts
-app.use('/api/', adminRoutes); // Matching your settingsAPI in frontend
+app.use('/api/', adminRoutes);
 
-// In production block:
+// 6. PRODUCTION STATIC FILES
 if (process.env.NODE_ENV === 'production') {
   const clientDistPath = path.join(__dirname, '..', '..', 'client', 'dist');
   
@@ -114,15 +109,11 @@ if (process.env.NODE_ENV === 'production') {
     etag: true,
     lastModified: true,
     setHeaders: (res, filePath) => {
-      // Never cache HTML — always fetch fresh on new deploy
       if (filePath.endsWith('.html')) {
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-      }
-      // Cache JS/CSS/images for 1 year (Vite adds unique hash to filenames)
-      else {
+      } else {
         res.set('Cache-Control', 'public, max-age=31536000, immutable');
       }
-      // Handle pre-compressed files
       if (filePath.endsWith('.gz')) {
         res.set('Content-Encoding', 'gzip');
       }
@@ -134,12 +125,12 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// 6. 404 HANDLER
+// 7. 404 HANDLER
 app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.originalUrl} not found` });
 });
 
-// 7. GLOBAL ERROR HANDLER/ throw an error if the NODE_ENV is on development
+// 8. GLOBAL ERROR HANDLER
 app.use((err, req, res, next) => {
   console.error('Server Error:', err.stack);
   res.status(err.status || 500).json({ 
@@ -148,11 +139,16 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 8. SERVER STARTUP
+// 9. SERVER STARTUP
 const startServer = async () => {
   try {
     await conn();
-    app.listen(PORT, () => {
+
+    // Init Socket.IO — attach io instance to app for use in controllers
+    const io = initSocket(httpServer, allowedOrigins);
+    app.set('io', io);
+
+    httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {

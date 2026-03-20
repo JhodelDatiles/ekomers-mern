@@ -16,10 +16,12 @@ import {
   Lock,
   ChevronDown,
   TrendingUp,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
 import { useCart } from "../context/CartContext";
+import { useSocket } from "../context/Socketcontext";
 import { orderAPI } from "../services/api";
 import toast from "react-hot-toast";
 import DashboardSkeleton from "../components/skeletons/DashboardSkeleton";
@@ -28,26 +30,24 @@ const UnifiedDashboard = () => {
   const { user, logout } = useAuth();
   const { wishlist } = useWishlist();
   const { cart } = useCart();
+  const { chatUnread } = useSocket();
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Checks the URL if it includes settings. example dashboard/settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(
     location.pathname.includes("settings"),
   );
   const isAdmin = user?.role === "admin";
-  // For fetching data to the unified dashboard
+
   const fetchOrders = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsLoading(true);
       const data = await orderAPI.getUserOrders();
-      // Use let since data is always changing
       let fetchedData = data;
-      if (fetchedData?.orders) fetchedData = fetchedData.orders; // "If fetchedData exists AND has an orders property → use that as our data"
-      else if (fetchedData?.data) fetchedData = fetchedData.data; // "If not, check if fetchedData exists AND has a data property → use that instead"
-      // If fetchedData is an array → use it, otherwise → use empty array (safety net)
+      if (fetchedData?.orders) fetchedData = fetchedData.orders;
+      else if (fetchedData?.data) fetchedData = fetchedData.data;
       setOrders(Array.isArray(fetchedData) ? fetchedData : []);
     } catch (err) {
       toast.error("COULD NOT FETCH ORDERS");
@@ -56,29 +56,29 @@ const UnifiedDashboard = () => {
       setIsLoading(false);
     }
   }, []);
-  // When a user logs in, fetch their orders." If there's no user, skip this useEffect.
+
   useEffect(() => {
     if (user) fetchOrders();
   }, [user, fetchOrders]);
-  // if the URL includes settings set setIsSettingsOpen to true
+
   useEffect(() => {
     if (location.pathname.includes("settings")) setIsSettingsOpen(true);
   }, [location.pathname]);
-  // Hanlde logout
+
   const handleLogout = () => {
-    logout(); // call the authContext looks for logout function there
+    logout();
     toast.success("Logged out successfully");
-    navigate("/"); // after logging out direct to this URL
+    navigate("/");
   };
 
   const dashboardContext = {
-    user, // current logged in user
-    orders: Array.isArray(orders) ? orders : [], // current user orders
-    wishlist: Array.isArray(wishlist) ? wishlist : wishlist?.items || [], // current user wishlist
-    cart, // current user cart 
+    user,
+    orders: Array.isArray(orders) ? orders : [],
+    wishlist: Array.isArray(wishlist) ? wishlist : wishlist?.items || [],
+    cart,
     isLoading,
-    setOrders, // function to update orders
-    fetchOrders, // function to refetch orders from API
+    setOrders,
+    fetchOrders,
   };
 
   // Admin sidebar navigation
@@ -105,11 +105,18 @@ const UnifiedDashboard = () => {
       icon: <Users size={20} />,
     },
     {
+      name: "Support Chat",
+      path: "/admin/chat",
+      icon: <MessageCircle size={20} />,
+      badge: chatUnread, // shows red dot when there are unread messages
+    },
+    {
       name: "Configuration",
       path: "/admin/configuration",
       icon: <Globe size={20} />,
     },
   ];
+
   // User sidebar navigation
   const userLinks = [
     {
@@ -133,6 +140,7 @@ const UnifiedDashboard = () => {
       icon: <Heart size={20} />,
     },
   ];
+
   // Settings sublinks navigation
   const settingsSubLinks = [
     {
@@ -157,22 +165,16 @@ const UnifiedDashboard = () => {
 
   return (
     <div className="flex flex-col md:flex-row min-h-[calc(100vh-64px)] bg-base-200 font-sans">
-      {/* SIDEBAR LOGIC:
-          - 'hidden': Hides the sidebar by default (Mobile/360px).
-          - 'md:flex': Shows the sidebar as a flex container on medium screens (768px+) and up.
-      */}
-      {/* SIDEBAR - hidden on mobile, visible on md screens and above */}
+      {/* SIDEBAR */}
       <aside
         className={`hidden md:flex flex-col w-full md:w-72 bg-base-100 shadow-xl z-10 border-r border-base-300 transition-colors duration-300 ${isAdmin ? "border-primary/20" : ""}`}
       >
-        {/* USER INFO HEADER - shows role and username */}
+        {/* USER INFO HEADER */}
         <div className="p-6 border-b border-base-200">
           <div className="flex items-center gap-2 mb-1">
-            {/* Shows "System Administrator" or "Customer Account" based on role */}
             <p className="text-[10px] font-black opacity-50 uppercase tracking-tighter">
               {isAdmin ? "System Administrator" : "Customer Account"}
             </p>
-            {/* Shield icon only visible for admins */}
             {isAdmin && (
               <ShieldCheck size={12} className="text-primary animate-pulse" />
             )}
@@ -181,11 +183,11 @@ const UnifiedDashboard = () => {
             {user?.username}
           </h2>
         </div>
-        {/* CHECK IF USER IS ADMIN THEN THROW THIS UI */}
+
         <nav className="p-4 space-y-1">
-          {/* NAV LINKS - renders adminLinks or userLinks depending on role */}
+          {/* NAV LINKS */}
           {(isAdmin ? adminLinks : userLinks).map((item) => {
-            const isActive = location.pathname === item.path; 
+            const isActive = location.pathname === item.path;
             return (
               <Link
                 key={item.path}
@@ -196,19 +198,28 @@ const UnifiedDashboard = () => {
                     : "hover:bg-base-200 opacity-70 hover:opacity-100"
                 }`}
               >
-                {/* Icon scales up when link is active or hovered */}
                 <span
-                  className={`${isActive ? "scale-110" : "group-hover:scale-110"} transition-transform`}
+                  className={`${isActive ? "scale-110" : "group-hover:scale-110"} transition-transform relative`}
                 >
                   {item.icon}
+                  {/* Unread badge — only shown when there are unread messages */}
+                  {item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-error rounded-full animate-pulse" />
+                  )}
                 </span>
-                {item.name}
+                <span className="flex-1">{item.name}</span>
+                {/* Numeric badge for chat unread count */}
+                {item.badge > 0 && (
+                  <span className="bg-error text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
+
           {/* SETTINGS DROPDOWN */}
           <div className="pt-1">
-            {/* Toggle button - opens/closes settings sub-links */}
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl font-bold transition-all group ${
@@ -218,7 +229,6 @@ const UnifiedDashboard = () => {
               }`}
             >
               <div className="flex items-center gap-3">
-                {/* Spin animation when on a settings page */}
                 <Settings
                   size={20}
                   className={
@@ -229,7 +239,6 @@ const UnifiedDashboard = () => {
                 />
                 Settings
               </div>
-              {/* Chevron rotates 180deg when dropdown is open */}
               <span
                 className={`transition-transform duration-300 ${isSettingsOpen ? "rotate-180" : ""}`}
               >
@@ -263,7 +272,7 @@ const UnifiedDashboard = () => {
           </div>
 
           <div className="divider opacity-50 pt-4"></div>
-          {/* LOGOUT BUTTON - calls handleLogout which clears auth and redirects to home */}
+
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest text-error hover:bg-error/10 w-full transition-colors"
@@ -272,14 +281,12 @@ const UnifiedDashboard = () => {
           </button>
         </nav>
       </aside>
-      
-      {/* MAIN CONTENT AREA - takes remaining space after sidebar */}
+
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-        {/* CONTENT WRAPPER - adds top primary border if user is admin */}
         <div
           className={`max-w-6xl mx-auto bg-base-100 p-6 rounded-3xl shadow-sm min-h-full border border-base-300 ${isAdmin ? "border-t-4 border-t-primary" : ""}`}
         >
-          {/* OUTLET - renders the current child route page and passes dashboardContext to it */}
           <Outlet context={dashboardContext} />
         </div>
       </main>

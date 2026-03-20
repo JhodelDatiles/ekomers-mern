@@ -156,30 +156,29 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
+// PUT /api/admin/orders/:id — Admin updates order status manually
+// NOTE: Stock restoration is NO LONGER handled here.
+// Auto-cancellations (via cancelOrder) already restore stock + trigger refund.
+// This handler is only for admin moving orders through shipping stages.
 export const updateOrderStatus = async (req, res) => {
   const { status } = req.body;
   try {
     const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
-
-    if (status === 'Cancelled' && order.status !== 'Cancelled') {
-      console.log(`🛠️ Admin finalizing cancellation for ${order._id}. Restoring stock...`);
-      const stockUpdates = order.items.map(item => {
-        if (!item.productId) return Promise.resolve();
-        return Product.updateOne(
-          { _id: item.productId, 'sizes.size': item.size },
-          { $inc: { 'sizes.$.stock': item.quantity } }
-        );
+    if (!order) return res.status(404).json({ message: "Order not found" });
+ 
+    // Safety guard: if an order was already auto-cancelled by the user,
+    // the admin should not be able to resurrect it through this endpoint.
+    if (order.status === 'Cancelled' && status !== 'Cancelled') {
+      return res.status(400).json({ 
+        message: "This order was already cancelled and cannot be reactivated." 
       });
-      await Promise.all(stockUpdates);
-      console.log('✅ Stock restored successfully.');
     }
-
+ 
     order.status = status;
     await order.save();
     res.status(200).json(order);
   } catch (error) {
-    console.error('❌ UPDATE STATUS ERROR:', error);
-    res.status(500).json({ message: 'Internal Server Error', error: error.message });
+    console.error("❌ UPDATE STATUS ERROR:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 };
