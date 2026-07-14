@@ -287,26 +287,26 @@ export const adminAPI = {
 
 // Payment API
 export const paymentAPI = {
-  createPaymentIntent: async (data) => {
-    const response = await api.post('/payment/create-intent', data);
-    return response.data;
-  },
-  createPaymentMethod: async (details) => {
-    const response = await api.post('/payment/create-method', { details });
-    return response.data;
-  },
-  attachPaymentMethod: async (data) => {
-    const response = await api.post('/payment/attach-method', data);
-    return response.data;
-  },
-  verifyPaymentAndCreateOrder: async (data) => {
-    const response = await api.post('/payment/verify-and-order', data);
-    return response.data;
-  },
-  createEWalletSource: async (data) => {
-    const response = await api.post('/payment/ewallet-source', data);
-    return response.data;
-  },
+  // createPaymentIntent: async (data) => {
+  //   const response = await api.post('/payment/create-intent', data);
+  //   return response.data;
+  // },
+  // createPaymentMethod: async (details) => {
+  //   const response = await api.post('/payment/create-method', { details });
+  //   return response.data;
+  // },
+  // attachPaymentMethod: async (data) => {
+  //   const response = await api.post('/payment/attach-method', data);
+  //   return response.data;
+  // },
+  // verifyPaymentAndCreateOrder: async (data) => {
+  //   const response = await api.post('/payment/verify-and-order', data);
+  //   return response.data;
+  // },
+  // createEWalletSource: async (data) => {
+  //   const response = await api.post('/payment/ewallet-source', data);
+  //   return response.data;
+  // },
   createQrPhPayment: async (data) => {
     const response = await api.post('/payment/qrph', data);
     return response.data;
