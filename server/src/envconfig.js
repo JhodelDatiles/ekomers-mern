@@ -13,17 +13,11 @@ export const config = {
 
   clientUrl: isProduction
     ? process.env.CLIENT_URL_PROD
-    : "http://localhost:5173", // ✅ hardcoded, no env variable needed
+    : "http://localhost:5173",
 
   mongoUri: process.env.MONGO_URI,
   port: process.env.PORT || 5000,
   brevoApiKey: process.env.BREVO_API_KEY,
   emailFrom: process.env.EMAIL_FROM || "noreply@ekomers.com",
 };
-console.log("NODE_ENV:", process.env.NODE_ENV);
-console.log("clientUrl will be:", config.clientUrl);
-console.log("PayMongo key starts with:", config.paymongoSecret?.slice(0, 10));
-console.log(
-  "PayMongo webhook starts with:",
-  config.paymongoSecret?.slice(0, 10),
-);
+
