@@ -51,7 +51,7 @@ app.use(
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
       const isAllowed =
-        allowedOrigins.includes(origin) || origin.includes("ngrok-free.dev");
+        allowedOrigins.includes(origin) || origin.endsWith("ngrok-free.dev");
       if (isAllowed) {
         callback(null, true);
       } else {

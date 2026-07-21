@@ -1,12 +1,13 @@
-import User from '../models/userSchema.js';
-import { v2 as cloudinary } from 'cloudinary'; // Ensure Cloudinary is configured
-import { sendSecurityCode } from '../services/emailService.js';
-import bcrypt from 'bcrypt'
+import User from "../models/userSchema.js";
+import { v2 as cloudinary } from "cloudinary"; // Ensure Cloudinary is configured
+import { sendSecurityCode } from "../services/emailService.js";
+import bcrypt from "bcrypt";
+import { getCookieOptions } from "../controllers/authController.js";
 
 //---------- GET USER ----------
 export const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id).select("-password");
     if (!user) return res.status(404).json({ message: "User not found" });
     res.status(200).json(user);
   } catch (error) {
@@ -18,14 +19,15 @@ export const getProfile = async (req, res) => {
 //---------- UPDATE USER PROFILE ----------
 export const updateProfile = async (req, res) => {
   try {
-    const { fullName, phone, address, profilePic, username, gender, dob } = req.body;
+    const { fullName, phone, address, profilePic, username, gender, dob } =
+      req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     // Update standard profile fields
     if (username) user.username = username;
     if (fullName) user.fullName = fullName;
-    if (phone) user.phone = phone; 
+    if (phone) user.phone = phone;
     if (gender) user.gender = gender;
     if (dob) user.dob = dob;
 
@@ -33,7 +35,7 @@ export const updateProfile = async (req, res) => {
     if (address && Array.isArray(address)) {
       user.address = address;
       // Tells Mongoose to deep-check the array for changes
-      user.markModified('address'); 
+      user.markModified("address");
     }
 
     await user.save();
@@ -42,7 +44,6 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({ message: "Update failed", error: error.message });
   }
 };
-
 
 // ... getProfile and updateProfile remain the same ...
 
@@ -61,7 +62,7 @@ export const requestSecurityCode = async (req, res) => {
     console.log("Attempting to send email to:", user.email); // LOG 1
 
     const emailSent = await sendSecurityCode(user, code, type);
-    
+
     if (!emailSent) {
       console.log("Email service returned FALSE"); // LOG 2
       return res.status(500).json({ message: "Email service failed" });
@@ -80,27 +81,36 @@ export const verifyPasswordChange = async (req, res) => {
     const user = await User.findById(req.user.id);
 
     if (user.verificationCode !== code || Date.now() > user.codeExpires) {
-      return res.status(400).json({ message: "Invalid or expired security code" });
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired security code" });
     }
 
     const isMatch = await bcrypt.compare(current, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Current password incorrect" });
+    if (!isMatch)
+      return res.status(400).json({ message: "Current password incorrect" });
 
     // ❌ REMOVE THESE TWO LINES (The "Double Hash" Bug)
     // const salt = await bcrypt.genSalt(10);
     // user.password = await bcrypt.hash(newPassword, salt);
-    
+
     // ✅ REPLACE WITH THIS:
     user.password = newPassword; // Set plain text, let UserSchema handle hashing
-    
+
     // Clear OTP fields
     user.verificationCode = undefined;
     user.codeExpires = undefined;
-    user.tokenVersion += 1; 
+    user.tokenVersion += 1;
 
     await user.save(); // This triggers userSchema.pre('save') which hashes it ONCE.
+    const cookieOptions = getCookieOptions();
 
-    res.status(200).json({ message: "Password updated successfully" });
+    res.clearCookie("accessToken", cookieOptions);
+    res.clearCookie("refreshToken", cookieOptions);
+
+    return res.status(200).json({
+      message: "Password updated successfully",
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -113,7 +123,9 @@ export const verifyAccountDeletion = async (req, res) => {
     const user = await User.findById(req.user.id);
 
     if (user.verificationCode !== code || Date.now() > user.codeExpires) {
-      return res.status(400).json({ message: "Invalid or expired security code" });
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired security code" });
     }
 
     if (user.profilePic?.publicId) {
@@ -121,7 +133,11 @@ export const verifyAccountDeletion = async (req, res) => {
     }
 
     await User.findByIdAndDelete(req.user.id);
-    res.clearCookie('token');
+
+    const cookieOptions = getCookieOptions();
+    res.clearCookie("accessToken", cookieOptions);
+    res.clearCookie("refreshToken", cookieOptions);
+
     res.status(200).json({ message: "Account successfully terminated" });
   } catch (error) {
     res.status(500).json({ message: "Deletion failed" });
