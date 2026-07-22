@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "build": "npm install --prefix server && npm install --prefix client --include=dev && npm run build --prefix client",
-  "start": "npm run start --prefix server"
+    "build": "npm install --prefix server && npm install --prefix client --include=dev && npm run build --prefix client",
+    "start": "npm run start --prefix server"
   },
   "repository": {
     "type": "git",
@@ -18,5 +18,8 @@
   "bugs": {
     "url": "https://github.com/JhodelDatiles/ekomers-mern/issues"
   },
-  "homepage": "https://github.com/JhodelDatiles/ekomers-mern#readme"
+  "homepage": "https://github.com/JhodelDatiles/ekomers-mern#readme",
+  "dependencies": {
+    "express-validator": "^7.3.2"
+  }
 }
