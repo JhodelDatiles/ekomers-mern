@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import cookie from 'cookie';
+import User from '../models/userSchema.js';
 
 export const initSocket = (httpServer, allowedOrigins) => {
   const io = new Server(httpServer, {
@@ -14,27 +15,26 @@ export const initSocket = (httpServer, allowedOrigins) => {
   // ── AUTH MIDDLEWARE ──
   // Reads the accessToken httpOnly cookie for auth
   // Falls back to auth.token for clients that pass it in handshake
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       let token = null;
-
-      // Try cookie first (browser clients)
       const rawCookie = socket.handshake.headers.cookie;
       if (rawCookie) {
         const parsed = cookie.parse(rawCookie);
         token = parsed.accessToken;
       }
-
-      // Fallback: client passed token in handshake.auth
       if (!token && socket.handshake.auth?.token) {
         token = socket.handshake.auth.token;
       }
-
-      if (!token) {
-        return next(new Error('Authentication required'));
-      }
+      if (!token) return next(new Error('Authentication required'));
 
       const decoded = jwt.verify(token, process.env.ACCESS_SECRET);
+
+      const user = await User.findById(decoded.id).select('tokenVersion role');
+      if (!user || decoded.tokenVersion !== user.tokenVersion) {
+        return next(new Error('Session invalidated'));
+      }
+
       socket.userId = String(decoded.id);
       socket.userRole = decoded.role;
       next();

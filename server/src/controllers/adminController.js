@@ -76,13 +76,33 @@ export const getUserById = async (req, res) => {
 
 export const adminUpdateUser = async (req, res) => {
   try {
-    if (req.params.id === req.user.id && req.body.role && req.body.role !== 'admin') {
+    // Only these fields may ever be touched through this endpoint.
+    // Anything else in req.body (password, tokenVersion, isVerified,
+    // verificationCode, etc.) is silently ignored, not applied.
+    const ALLOWED_FIELDS = ['username', 'fullName', 'phone', 'gender', 'role'];
+
+    const updates = {};
+    for (const field of ALLOWED_FIELDS) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (updates.role && !['user', 'admin'].includes(updates.role)) {
+      return res.status(400).json({ message: 'Invalid role value' });
+    }
+
+    if (req.params.id === req.user.id && updates.role && updates.role !== 'admin') {
       return res.status(400).json({ message: 'You cannot demote yourself from Admin!' });
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
     }
 
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updates },
       { new: true, runValidators: true }
     ).select('-password');
 

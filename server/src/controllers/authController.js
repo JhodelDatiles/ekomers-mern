@@ -21,9 +21,12 @@ export const getCookieOptions = () => {
 
 const setTokenCookies = (res, user) => {
   const accessToken = jwt.sign(
-    { id: user._id, role: user.role, tokenVersion: user.tokenVersion },
-    process.env.ACCESS_SECRET,
-    { expiresIn: "15m" },
+    { id: user._id, role: user.role, tokenVersion: user.tokenVersion }, // Payload
+    process.env.ACCESS_SECRET, // Secret used for Signature
+    {     expiresIn: "15m",       // Goes to Payload configuration
+    algorithm: "HS256",     // Goes to Header configuration
+    header: { typ: "JWT" }  // Correct way to explicitly pass header fields! }, // Library automatically converts this to standard Header properties (like algorithm 'HS256')
+    }
   );
   const refreshToken = jwt.sign(
     { id: user._id, tokenVersion: user.tokenVersion },
@@ -54,18 +57,20 @@ export const refreshToken = async (req, res) => {
     if (!user) return res.status(401).json({ message: "User not found" });
 
     if (decoded.tokenVersion !== user.tokenVersion) {
-      return res.status(401).json({ message: "Session invalidated. Please login again." });
+      return res
+        .status(401)
+        .json({ message: "Session invalidated. Please login again." });
     }
 
     const accessToken = jwt.sign(
       { id: user._id, role: user.role, tokenVersion: user.tokenVersion },
       process.env.ACCESS_SECRET,
-      { expiresIn: '15m' }
+      { expiresIn: "15m" },
     );
 
     const cookieOptions = getCookieOptions();
 
-    res.cookie('accessToken', accessToken, {
+    res.cookie("accessToken", accessToken, {
       ...cookieOptions,
       maxAge: 15 * 60 * 1000,
     });
@@ -73,19 +78,18 @@ export const refreshToken = async (req, res) => {
     const newRefreshToken = jwt.sign(
       { id: user._id, tokenVersion: user.tokenVersion },
       process.env.REFRESH_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: "7d" },
     );
-    res.cookie('refreshToken', newRefreshToken, {
+    res.cookie("refreshToken", newRefreshToken, {
       ...cookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    const fullUser = await User.findById(user._id).select('-password');
-    res.status(200).json({ 
+    const fullUser = await User.findById(user._id).select("-password");
+    res.status(200).json({
       message: "Token refreshed",
-      user: fullUser 
+      user: fullUser,
     });
-
   } catch (err) {
     res.status(401).json({ message: "Invalid refresh token" });
   }
@@ -251,6 +255,7 @@ export const resetPassword = async (req, res) => {
     user.password = newPassword;
     user.verificationCode = undefined;
     user.codeExpires = undefined;
+    user.tokenVersion += 1;
     await user.save();
 
     res.json({ message: "Password updated successfully!" });
