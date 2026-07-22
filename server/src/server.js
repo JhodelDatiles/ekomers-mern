@@ -50,12 +50,11 @@ app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
-      const isAllowed =
-        allowedOrigins.includes(origin) || origin.endsWith("ngrok-free.dev");
+      const isAllowed = allowedOrigins.includes(origin);
       if (isAllowed) {
         callback(null, true);
       } else {
-        console.log("❌ CORS Rejected Origin:", origin);
+        console.log("CORS Rejected Origin:", origin);
         callback(new Error("Not allowed by CORS"));
       }
     },
