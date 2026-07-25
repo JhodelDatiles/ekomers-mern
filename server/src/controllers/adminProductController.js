@@ -16,7 +16,7 @@ export const adminCreateProduct = async (req, res) => {
     const product = new Product({
       name,
       description,
-      price: Number(basePrice) || 0, 
+      basePrice: Number(basePrice) || 0, 
       category,
       images, 
       sizes: sizes.map(s => ({
@@ -55,7 +55,7 @@ export const adminUpdateProduct = async (req, res) => {
     const { basePrice, sizes, ...rest } = req.body;
     const updateData = { ...rest };
     
-    if (basePrice) updateData.price = Number(basePrice);
+    if (basePrice) updateData.basePrice = Number(basePrice);
     if (sizes) {
       updateData.sizes = sizes.map(s => ({
         size: s.size,

@@ -109,7 +109,7 @@ const AdminProducts = () => {
   const handleFormSubmit = async (formData) => {
     setLoading(true);
     try {
-      const dataToSubmit = { ...formData, basePrice: formData.price };
+      const dataToSubmit = { ...formData };
       if (selectedProduct) {
         await adminProductAPI.updateProduct(selectedProduct._id, dataToSubmit);
         toast.success("Product updated");

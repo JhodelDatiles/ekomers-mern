@@ -4,7 +4,7 @@ import Product from '../models/productSchema.js';
 // GET /api/cart - Get user cart
 export const getCart = async (req, res) => {
   try {
-    let cart = await Cart.findOne({ userId: req.user.id }).populate('items.productId', 'name images price sizes');
+    let cart = await Cart.findOne({ userId: req.user.id }).populate('items.productId', 'name images basePrice sizes');
     if (!cart) {
       return res.status(200).json({ items: [], totalAmount: 0 });
     }
