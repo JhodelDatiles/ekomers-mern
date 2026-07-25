@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Printer, X, Phone, Check } from "lucide-react";
 import ModalContainer from "./ModalContainer";
 

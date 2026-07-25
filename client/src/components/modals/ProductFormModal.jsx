@@ -46,7 +46,7 @@ const ProductFormModal = ({
   const [newSizeName, setNewSizeName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [newColor, setNewColor] = useState("");
-  
+
   // Ref for background tracking (prevents re-render loops)
   const sessionImagesRef = useRef([]);
 
@@ -72,9 +72,9 @@ const ProductFormModal = ({
       if (imagesToClean.length > 0) {
         imagesToClean.forEach((img) => {
           if (img.publicId) {
-            uploadAPI.deleteImage(img.publicId).catch((err) => 
-              console.error("Auto-cleanup failed", err)
-            );
+            uploadAPI
+              .deleteImage(img.publicId)
+              .catch((err) => console.error("Auto-cleanup failed", err));
           }
         });
       }
@@ -100,21 +100,27 @@ const ProductFormModal = ({
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
 
-    if (formData.name.length > 40) return toast.error("Name exceeds 40 characters");
-    if (formData.description.length > 500) return toast.error("Description exceeds 500 characters");
+    if (formData.name.length > 40)
+      return toast.error("Name exceeds 40 characters");
+    if (formData.description.length > 500)
+      return toast.error("Description exceeds 500 characters");
     if (!formData.name.trim()) return toast.error("Product name is required");
-    if (formData.basePrice <= 0) return toast.error("Please set a valid base price");
+    if (formData.basePrice <= 0)
+      return toast.error("Please set a valid base price");
     if (!formData.category) return toast.error("Please select a category");
-    if (!formData.description.trim()) return toast.error("Description is required");
-    if (formData.sizes.length === 0) return toast.error("Select at least one size");
-    if (formData.images.length === 0) return toast.error("Please upload at least one image");
+    if (!formData.description.trim())
+      return toast.error("Description is required");
+    if (formData.sizes.length === 0)
+      return toast.error("Select at least one size");
+    if (formData.images.length === 0)
+      return toast.error("Please upload at least one image");
 
     try {
       await onSubmit(formData);
       sessionImagesRef.current = []; // Prevent cleanup on success
       onClose();
     } catch (err) {
-        // Error handling logic preserved
+      // Error handling logic preserved
     }
   };
 
@@ -125,15 +131,15 @@ const ProductFormModal = ({
     const loadToast = toast.loading("Uploading images...");
     try {
       const res = await uploadAPI.uploadMultiple(files);
-      
+
       // Update Ref for background cleanup
       sessionImagesRef.current = [...sessionImagesRef.current, ...res.images];
-      
+
       setFormData((prev) => ({
         ...prev,
         images: [...prev.images, ...res.images],
       }));
-      
+
       toast.success("Images uploaded", { id: loadToast });
     } catch (err) {
       toast.error("Upload failed", { id: loadToast });
@@ -152,7 +158,9 @@ const ProductFormModal = ({
         images: prev.images.filter((_, i) => i !== index),
       }));
       // Sync Ref
-      sessionImagesRef.current = sessionImagesRef.current.filter((img) => img.publicId !== publicId);
+      sessionImagesRef.current = sessionImagesRef.current.filter(
+        (img) => img.publicId !== publicId,
+      );
       toast.success("Image removed");
     } catch (err) {
       toast.error("Failed to delete image");
@@ -255,8 +263,8 @@ const ProductFormModal = ({
                 </label>
                 <span
                   className={`text-[10px] font-bold transition-all duration-300 ${
-                    formData.description.length > 500 
-                      ? "text-error animate-pulse scale-110" 
+                    formData.description.length > 500
+                      ? "text-error animate-pulse scale-110"
                       : "opacity-20 text-white"
                   }`}
                 >
@@ -266,16 +274,18 @@ const ProductFormModal = ({
               <textarea
                 required
                 className={`textarea textarea-bordered bg-[#1a1c23] rounded-2xl h-28 text-white font-medium transition-all duration-300 custom-scrollbar w-full 
-                  ${formData.description.length > 500 
-                    ? "border-error focus:border-error ring-2 ring-error/10 bg-error/5" 
-                    : "border-white/10 focus:ring-2 focus:ring-primary/50 focus:border-primary"}`}
+                  ${
+                    formData.description.length > 500
+                      ? "border-error focus:border-error ring-2 ring-error/10 bg-error/5"
+                      : "border-white/10 focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                  }`}
                 placeholder="Describe style, material, and fit..."
                 value={formData.description}
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
               />
-              <div className="h-4 mt-1 px-1"> 
+              <div className="h-4 mt-1 px-1">
                 {formData.description.length > 500 && (
                   <p className="text-[10px] font-black text-error animate-in slide-in-from-top-1 duration-300 uppercase italic tracking-tight">
                     Exceeded 500 characters

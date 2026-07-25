@@ -11,7 +11,6 @@ import transporter from "../config/email.js";
 // ───────────────────────────────────────────────────────────────── 
 
 const isProduction = process.env.NODE_ENV === "production";
-console.log("EMAIL DEBUG — isProduction:", isProduction, "| NODE_ENV:", process.env.NODE_ENV);
 // ─────────────────────────────────────────────────────────────────
 // Production: Brevo HTTP API. Development: Nodemailer (Gmail).
 // ─────────────────────────────────────────────────────────────────
