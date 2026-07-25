@@ -44,7 +44,7 @@ export const initSocket = (httpServer, allowedOrigins) => {
   });
 
   io.on('connection', (socket) => {
-    console.log(`🔌 Socket connected: user ${socket.userId} (${socket.userRole})`);
+    // console.log(`🔌 Socket connected: user ${socket.userId} (${socket.userRole})`);
 
     // Each user joins their personal room for direct notifications
     socket.join(`user_${socket.userId}`);

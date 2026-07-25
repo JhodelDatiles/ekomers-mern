@@ -1,7 +1,6 @@
 import { config } from "./envconfig.js";
 import express from "express";
 import { createServer } from "http";
-import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import conn from "./config/db.js";
@@ -26,13 +25,12 @@ import wishlistRoutes from "./routes/wishlistRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import aiChatRoutes from "./routes/Aichatroutes.js";
 
-dotenv.config();
 
 const app = express();
 const httpServer = createServer(app); // Wrap express in http server for Socket.IO
 app.set("trust proxy", 1);
-const PORT = process.env.PORT || 5000;
-const isProduction = process.env.NODE_ENV === "production";
+const PORT = config.port || 5000;
+const isProduction = config.isProduction === "production";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -109,7 +107,7 @@ app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/", adminRoutes);
 
 // 6. PRODUCTION STATIC FILES
-if (process.env.NODE_ENV === "production") {
+if (config.isProduction === "production") {
   const clientDistPath = path.join(__dirname, "..", "..", "client", "dist");
 
   app.use(
@@ -159,6 +157,7 @@ const startServer = async () => {
 
     httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      console.log(`------------------------------------------------------`);
     });
   } catch (error) {
     console.error("Database connection failed:", error.message);
