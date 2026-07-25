@@ -4,7 +4,7 @@ import Wishlist from '../models/wishlistSchema.js';
 export const getWishlist = async (req, res) => {
   try {
     let wishlist = await Wishlist.findOne({ userId: req.user.id })
-      .populate('products', 'name images price sizes');
+      .populate('products', 'name images basePrice sizes');
 
     if (!wishlist) {
       return res.status(200).json({ products: [] });
@@ -35,7 +35,7 @@ export const toggleWishlistItem = async (req, res) => {
     }
 
     await wishlist.save();
-    const updatedWishlist = await wishlist.populate('products', 'name images price sizes');
+    const updatedWishlist = await wishlist.populate('products', 'name images basePrice sizes');
     res.status(200).json(updatedWishlist);
   } catch (error) {
     res.status(500).json({ message: "Error updating wishlist" });

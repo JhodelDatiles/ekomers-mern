@@ -28,7 +28,9 @@ const AdminDashboardOverview = () => {
 
   // 🛠️ FILTER: Captures 0 (Sold Out) up to 5 units
   const criticalStock =
-    data.lowStockProducts?.filter((p) => p.stock >= 0 && p.stock <= 5) || [];
+    data.lowStockProducts?.filter((p) =>
+      p.sizes?.some((s) => s.stock <= 5)
+    ) || [];
 
   const fetchOverview = async () => {
     try {

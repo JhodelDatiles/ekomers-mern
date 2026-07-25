@@ -196,7 +196,7 @@ const Navbar = () => {
                     </p>
                   </div>
                   <span className="text-[10px] font-black text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                    ₱{Number(product.price).toLocaleString()}
+                    ₱{Number(product.basePrice || product.sizes?.[0].price).toLocaleString()}
                   </span>
                 </button>
               ))}

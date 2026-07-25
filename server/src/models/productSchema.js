@@ -16,7 +16,6 @@ const productSchema = new mongoose.Schema(
       url: String,
       publicId: String
     }],
-    stock: { type: Number, default: 0 },
     sizes: [sizeSchema],
     colors: [String],
     specifications: {

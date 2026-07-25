@@ -308,11 +308,13 @@ export const getSalesReport = async (req, res) => {
         .select('orderId totalAmount status items createdAt')
         .lean(),
 
-      Product.find({ stock: { $lte: 5 } })
-        .select('name stock price sizes category')
-        .sort({ stock: 1 })
-        .limit(10)
-        .lean(),
+      Product.aggregate([
+        { $addFields: { totalStock: { $sum: '$sizes.stock' } } },
+        { $match: { 'sizes.stock': { $lte: 5 } } },
+        { $sort: { totalStock: 1 } },
+        { $limit: 10 },
+        { $project: { name: 1, basePrice: 1, sizes: 1, category: 1, stock: '$totalStock' } }
+      ]),
     ]);
 
     res.status(200).json({
