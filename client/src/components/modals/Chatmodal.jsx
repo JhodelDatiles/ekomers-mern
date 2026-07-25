@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Loader2, Package, Lock, MessageCircle } from 'lucide-react';
-import { useSocket } from '../../context/Socketcontext';
-import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
+import React, { useState, useEffect, useRef } from "react";
+import { X, Send, Loader2, Package, Lock, MessageCircle } from "lucide-react";
+import { useSocket } from "../../context/Socketcontext";
+import { useAuth } from "../../context/AuthContext";
+import api from "../../services/api";
 
 const ChatModal = ({ isOpen, onClose, order }) => {
   const { user } = useAuth();
@@ -10,7 +10,7 @@ const ChatModal = ({ isOpen, onClose, order }) => {
 
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false); // admin is typing
@@ -28,18 +28,22 @@ const ChatModal = ({ isOpen, onClose, order }) => {
       setLoading(true);
       try {
         // Get or create conversation for this order
-        const { data: conv } = await api.post('/chat/conversations', { orderId: order._id });
+        const { data: conv } = await api.post("/chat/conversations", {
+          orderId: order._id,
+        });
         setConversation(conv);
-        setIsClosed(conv.status === 'closed');
+        setIsClosed(conv.status === "closed");
 
         // Load messages
-        const { data: msgs } = await api.get(`/chat/conversations/${conv._id}/messages`);
+        const { data: msgs } = await api.get(
+          `/chat/conversations/${conv._id}/messages`,
+        );
         setMessages(msgs);
 
         // Mark as read
         await api.put(`/chat/conversations/${conv._id}/read`);
       } catch (err) {
-        console.error('Chat init error:', err);
+        console.error("Chat init error:", err);
       } finally {
         setLoading(false);
       }
@@ -52,12 +56,12 @@ const ChatModal = ({ isOpen, onClose, order }) => {
   useEffect(() => {
     if (!socket || !conversation) return;
 
-    socket.emit('join_conversation', conversation._id);
+    socket.emit("join_conversation", conversation._id);
 
     const handleNewMessage = (msg) => {
-      setMessages(prev => {
+      setMessages((prev) => {
         // Deduplicate by _id
-        if (prev.find(m => m._id === msg._id)) return prev;
+        if (prev.find((m) => m._id === msg._id)) return prev;
         return [...prev, msg];
       });
       // Mark as read since modal is open
@@ -65,57 +69,64 @@ const ChatModal = ({ isOpen, onClose, order }) => {
     };
 
     const handleTypingStart = ({ role }) => {
-      if (role === 'admin') setIsTyping(true);
+      if (role === "admin") setIsTyping(true);
     };
 
     const handleTypingStop = () => setIsTyping(false);
 
     const handleClosed = () => setIsClosed(true);
 
-    socket.on('new_message', handleNewMessage);
-    socket.on('typing_start', handleTypingStart);
-    socket.on('typing_stop', handleTypingStop);
-    socket.on('conversation_closed', handleClosed);
+    socket.on("new_message", handleNewMessage);
+    socket.on("typing_start", handleTypingStart);
+    socket.on("typing_stop", handleTypingStop);
+    socket.on("conversation_closed", handleClosed);
 
     return () => {
-      socket.emit('leave_conversation', conversation._id);
-      socket.off('new_message', handleNewMessage);
-      socket.off('typing_start', handleTypingStart);
-      socket.off('typing_stop', handleTypingStop);
-      socket.off('conversation_closed', handleClosed);
+      socket.emit("leave_conversation", conversation._id);
+      socket.off("new_message", handleNewMessage);
+      socket.off("typing_start", handleTypingStart);
+      socket.off("typing_stop", handleTypingStop);
+      socket.off("conversation_closed", handleClosed);
     };
   }, [socket, conversation?._id]);
 
   // ── Auto-scroll ──
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
   const handleInputChange = (e) => {
     setInput(e.target.value);
     if (!socket || !conversation) return;
 
-    socket.emit('typing_start', { conversationId: conversation._id });
+    socket.emit("typing_start", { conversationId: conversation._id });
     clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(() => {
-      socket.emit('typing_stop', { conversationId: conversation._id });
+      socket.emit("typing_stop", { conversationId: conversation._id });
     }, 1500);
   };
 
   const handleSend = async () => {
     if (!input.trim() || !conversation || sending || isClosed) return;
     const content = input.trim();
-    setInput('');
+    setInput("");
     setSending(true);
 
     // Stop typing indicator
-    if (socket) socket.emit('typing_stop', { conversationId: conversation._id });
+    if (socket)
+      socket.emit("typing_stop", { conversationId: conversation._id });
 
     try {
-      const { data: msg } = await api.post(`/chat/conversations/${conversation._id}/messages`, { content });
+      const { data: msg } = await api.post(
+        `/chat/conversations/${conversation._id}/messages`,
+        { content },
+      );
       // Socket will deliver it to the other party; add locally immediately
-      setMessages(prev => prev.find(m => m._id === msg._id) ? prev : [...prev, msg]);
+      setMessages((prev) =>
+        prev.find((m) => m._id === msg._id) ? prev : [...prev, msg],
+      );
     } catch (err) {
+      console.log(err)
       setInput(content); // restore on failure
     } finally {
       setSending(false);
@@ -123,7 +134,7 @@ const ChatModal = ({ isOpen, onClose, order }) => {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -137,7 +148,6 @@ const ChatModal = ({ isOpen, onClose, order }) => {
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-[#1a1c23] border border-white/10 w-full md:max-w-lg rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col h-[85vh] md:h-[600px] animate-in slide-in-from-bottom-4 md:zoom-in-95 duration-200">
-
         {/* HEADER */}
         <div className="flex items-center justify-between p-5 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3">
@@ -150,8 +160,8 @@ const ChatModal = ({ isOpen, onClose, order }) => {
               </p>
               {order && (
                 <p className="text-[9px] font-bold opacity-30 uppercase text-white flex items-center gap-1">
-                  <Package size={9} />
-                  #{order._id?.slice(-8).toUpperCase()} · ₱{order.totalAmount?.toLocaleString()}
+                  <Package size={9} />#{order._id?.slice(-8).toUpperCase()} · ₱
+                  {order.totalAmount?.toLocaleString()}
                 </p>
               )}
             </div>
@@ -186,29 +196,38 @@ const ChatModal = ({ isOpen, onClose, order }) => {
             </div>
           ) : (
             messages.map((msg) => {
-              const isMe = String(msg.senderId?._id || msg.senderId) === String(user?._id);
+              const isMe =
+                String(msg.senderId?._id || msg.senderId) === String(user?._id);
               return (
                 <div
                   key={msg._id}
-                  className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${isMe ? "justify-end" : "justify-start"}`}
                 >
-                  <div className={`max-w-[78%] flex flex-col gap-1 ${isMe ? 'items-end' : 'items-start'}`}>
+                  <div
+                    className={`max-w-[78%] flex flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}
+                  >
                     {!isMe && (
                       <span className="text-[9px] font-black uppercase opacity-30 text-white px-1">
-                        {msg.senderRole === 'admin' ? 'Support' : msg.senderId?.username}
+                        {msg.senderRole === "admin"
+                          ? "Support"
+                          : msg.senderId?.username}
                       </span>
                     )}
                     <div
                       className={`px-4 py-2.5 rounded-2xl text-sm font-medium leading-relaxed
-                        ${isMe
-                          ? 'bg-primary text-black rounded-br-md'
-                          : 'bg-white/10 text-white rounded-bl-md'
+                        ${
+                          isMe
+                            ? "bg-primary text-black rounded-br-md"
+                            : "bg-white/10 text-white rounded-bl-md"
                         }`}
                     >
                       {msg.content}
                     </div>
                     <span className="text-[8px] opacity-20 text-white px-1">
-                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </span>
                   </div>
                 </div>
@@ -221,9 +240,18 @@ const ChatModal = ({ isOpen, onClose, order }) => {
             <div className="flex justify-start">
               <div className="bg-white/10 text-white/50 px-4 py-2.5 rounded-2xl rounded-bl-md">
                 <div className="flex gap-1 items-center">
-                  <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span
+                    className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 bg-white/40 rounded-full animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
                 </div>
               </div>
             </div>
@@ -254,7 +282,11 @@ const ChatModal = ({ isOpen, onClose, order }) => {
                 disabled={!input.trim() || sending}
                 className="w-11 h-11 bg-primary rounded-2xl flex items-center justify-center text-black shrink-0 disabled:opacity-30 hover:brightness-110 transition-all active:scale-95 self-end"
               >
-                {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                {sending ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Send size={16} />
+                )}
               </button>
             </div>
           )}
