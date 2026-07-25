@@ -30,7 +30,6 @@ const app = express();
 const httpServer = createServer(app); // Wrap express in http server for Socket.IO
 app.set("trust proxy", 1);
 const PORT = config.port || 5000;
-const isProduction = config.isProduction === "production";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -83,7 +82,7 @@ app.use(cookieParser());
 app.get("/api/health", (req, res) => {
   res.json({
     message: "E-commerce API is running!",
-    mode: isProduction ? "production" : "development",
+    mode: config.isProduction ? "production" : "development",
   });
 });
 
@@ -107,7 +106,7 @@ app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/", adminRoutes);
 
 // 6. PRODUCTION STATIC FILES
-if (config.isProduction === "production") {
+if (config.isProduction) {
   const clientDistPath = path.join(__dirname, "..", "..", "client", "dist");
 
   app.use(
@@ -142,7 +141,7 @@ app.use((err, req, res, next) => {
   console.error("Server Error:", err.stack);
   res.status(err.status || 500).json({
     message: err.message || "Something went wrong!",
-    error: isProduction ? {} : err,
+    error: config.isProduction ? {} : err,
   });
 });
 

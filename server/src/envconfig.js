@@ -14,7 +14,7 @@ export const config = {
     ? process.env.CLIENT_URL_PROD
     : "http://localhost:5173",
   //NODE STATUS
-  isProduction: isProduction ? "Production" : "Development",
+  isProduction,
   //DATABASE
   mongoUri: process.env.MONGO_URI,
   //PORT
