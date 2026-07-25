@@ -25,7 +25,7 @@ const ProductViewModal = ({ product, onClose }) => {
   const liked = isInWishlist(product?._id);
   const selectedSizeData = product.sizes?.find(s => s.size === selectedSize);
   const maxAvailable = selectedSizeData?.stock || 0;
-  const currentPrice = selectedSizeData ? selectedSizeData.price : (product.basePrice || product.sizes?.[0]?.price || product.price);
+  const currentPrice = selectedSizeData ? selectedSizeData.price : (product.basePrice || product.sizes?.[0]?.price);
   const productImage = product.images?.[0]?.url || product.images?.[0];
   
   const totalStock = product.sizes?.reduce((acc, s) => acc + s.stock, 0) || 0;
