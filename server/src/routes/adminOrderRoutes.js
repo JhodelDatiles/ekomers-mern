@@ -1,5 +1,5 @@
 import express from 'express';
-import { getAllOrders, getOrderUsers, getOrdersByUser, updateOrderStatus } from '../controllers/adminOrderController.js';
+import { getAllOrders, getOrderUsers, getOrdersByUser, updateOrderStatus } from '../controllers/admin/adminOrderController.js';
 import { protect, adminOnly } from '../middlewares/protect.js';
 
 const router = express.Router();
