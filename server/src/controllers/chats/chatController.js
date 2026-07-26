@@ -1,6 +1,6 @@
-import Conversation from '../models/Conversationschema.js';
-import Message from '../models/Messageschema.js';
-import Order from '../models/orderSchema.js';
+import Conversation from '../../models/Conversationschema.js';
+import Message from '../../models/Messageschema.js';
+import Order from '../../models/orderSchema.js';
 
 // ─────────────────────────────────────────────────────────────────
 // USER: Get or create a conversation for a specific order
