@@ -1,5 +1,5 @@
-import Order from '../models/orderSchema.js';
-import Product from '../models/productSchema.js';
+import Order from '../../models/orderSchema.js';
+import Product from '../../models/productSchema.js';
 
 // Helper: resolve date filter from period OR explicit from/to
 const getDateFilter = ({ period, dateFrom, dateTo }) => {

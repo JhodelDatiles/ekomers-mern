@@ -23,7 +23,7 @@ import reviewRoutes from "./routes/reviewRoutes.js";
 import mapRoutes from "./routes/map.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-import aiChatRoutes from "./routes/Aichatroutes.js";
+import aiChatRoutes from "./routes/aiChatRoutes.js";
 
 
 const app = express();

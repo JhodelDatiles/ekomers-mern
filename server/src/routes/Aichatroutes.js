@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middlewares/protect.js';
-import { aiChat } from '../controllers/Aichatcontroller.js';
+import { aiChat } from '../controllers/aiChatController.js';
 
 const router = express.Router();
 
