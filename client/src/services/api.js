@@ -348,7 +348,7 @@ export const settingsAPI = {
 // Admin Product API
 export const adminProductAPI = {
   getProducts: async (params = {}) => {
-    const response = await api.get('/admin/products-list', { params });
+    const response = await api.get('/admin/products', { params });
     return response.data;
   },
   createProduct: async (productData) => {

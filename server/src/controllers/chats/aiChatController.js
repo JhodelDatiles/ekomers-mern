@@ -1,7 +1,7 @@
 import axios from 'axios';
-import Product from '../models/productSchema.js';
-import Order from '../models/orderSchema.js';
-import AdminSettings from '../models/adminSettingsSchema.js';
+import Product from '../../models/productSchema.js';
+import Order from '../../models/orderSchema.js';
+import AdminSettings from '../../models/adminSettingsSchema.js';
 
 // ─────────────────────────────────────────────────────────────────
 // BUILD SYSTEM PROMPT — pulls live data from DB so the bot always
