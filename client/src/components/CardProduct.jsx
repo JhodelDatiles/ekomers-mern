@@ -22,6 +22,9 @@ const ProductCard = ({ product, onQuickView }) => {
     toggleWishlist(product);
   };
 
+  const getErrorMessage = (err, fallback) =>
+    err?.response?.data?.message || err?.message || fallback;
+
   const handleAddToCart = async (e) => {
     e.stopPropagation();
     
@@ -41,9 +44,9 @@ const ProductCard = ({ product, onQuickView }) => {
     try {
       const selectedSize = inStockSizes[0]?.size || "OS";
       await addToCart(product._id, 1, selectedSize);
-      toast.success("ADDED TO BAG!");
+      toast.success("Added to the bag!");
     } catch (err) {
-      toast.error("FAILED TO ADD");
+      toast.error(getErrorMessage(err, "Failed to add to cart!"));
     }
   };
 
@@ -62,7 +65,7 @@ const ProductCard = ({ product, onQuickView }) => {
         
         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
           <div className="bg-white/90 p-3 rounded-full text-black scale-75 group-hover:scale-100 transition-transform duration-300">
-             <Eye size={24} />
+            <Eye size={24} />
           </div>
         </div>
 

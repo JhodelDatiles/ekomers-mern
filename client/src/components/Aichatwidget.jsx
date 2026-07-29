@@ -74,7 +74,7 @@ const AIChatWidget = () => {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: "Sorry, I'm having trouble connecting right now. Please try the **Chat with Seller** button on your order card to reach our support team directly."
-      }]);
+      }, err]);
     } finally {
       setLoading(false);
     }

@@ -42,6 +42,10 @@ const ProductViewModal = ({ product, onClose }) => {
   const totalStock = product.sizes?.reduce((acc, s) => acc + s.stock, 0) || 0;
   const isSoldOut = totalStock <= 0;
 
+  const getErrorMessage = (err, fallback) => 
+    err?.response?.data?.message || err?.message || fallback;
+  
+  
   const handleQuantityChange = (val) => {
     if (val < 1) return;
     if (val > maxAvailable) {
@@ -62,7 +66,7 @@ const ProductViewModal = ({ product, onClose }) => {
       toast.success("ADDED TO BAG!");
       onClose();
     } catch (err) {
-      toast.error("FAILED TO ADD.");
+      toast.error(getErrorMessage(err, "Failed to add to card"));
     } finally {
       setAddingToCart(false);
     }
@@ -136,11 +140,11 @@ const ProductViewModal = ({ product, onClose }) => {
             {/* Description: Collapsible-like behavior or shorter max-height for mobile */}
             <div className="p-4 md:p-5 flex flex-col bg-base-200/50">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 opacity-50 flex items-center gap-2">
-                <span className="w-4 h-[2px] bg-primary"></span> Details
+                <span className="w-4 h-0.5 bg-primary"></span> Details
               </h3>
 
               <div
-                className={`custom-scrollbar ${isScrollable ? "overflow-y-auto max-h-[80px] md:max-h-[120px]" : ""}`}
+                className={`custom-scrollbar ${isScrollable ? "overflow-y-auto max-h-20 md:max-h-30" : ""}`}
               >
                 <p className="text-[11px] md:text-xs leading-relaxed text-base-content/70 whitespace-pre-wrap">
                   {descriptionText}
@@ -155,7 +159,7 @@ const ProductViewModal = ({ product, onClose }) => {
               <div className="badge badge-primary badge-sm mb-2 uppercase font-black text-[9px] italic tracking-widest">
                 {product.category}
               </div>
-              <h2 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter leading-none mb-2 break-words">
+              <h2 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter leading-none mb-2 wrap-break-word">
                 {product.name}
               </h2>
               <p className="text-2xl font-black text-primary italic mb-6">

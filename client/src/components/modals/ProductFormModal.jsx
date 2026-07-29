@@ -18,6 +18,16 @@ import ModalContainer from "../modals/ModalContainer";
 import CategorySection from "../CategorySection";
 import SizeInventorySection from "../SizeInventorySection";
 
+const initialFormState = {
+  name: "",
+  description: "",
+  basePrice: 0,
+  category: "",
+  sizes: [],
+  colors: [],
+  images: [],
+};
+
 const ProductFormModal = ({
   isOpen,
   onClose,
@@ -29,23 +39,12 @@ const ProductFormModal = ({
   setAvailableSizes,
   loading,
 }) => {
-  const initialFormState = {
-    name: "",
-    description: "",
-    basePrice: 0,
-    category: "",
-    sizes: [],
-    colors: [],
-    images: [],
-  };
-
   const [formData, setFormData] = useState(initialFormState);
   const [showAddCat, setShowAddCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [showAddSize, setShowAddSize] = useState(false);
   const [newSizeName, setNewSizeName] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [newColor, setNewColor] = useState("");
 
   // Ref for background tracking (prevents re-render loops)
   const sessionImagesRef = useRef([]);
@@ -97,6 +96,9 @@ const ProductFormModal = ({
     }
   };
 
+  const getErrorMessage = (err, fallback) =>
+  err?.response?.data?.message || err?.message || fallback;
+
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
 
@@ -120,7 +122,7 @@ const ProductFormModal = ({
       sessionImagesRef.current = []; // Prevent cleanup on success
       onClose();
     } catch (err) {
-      // Error handling logic preserved
+      toast.error(getErrorMessage(err, "Failed to save product" ));
     }
   };
 
@@ -142,7 +144,7 @@ const ProductFormModal = ({
 
       toast.success("Images uploaded", { id: loadToast });
     } catch (err) {
-      toast.error("Upload failed", { id: loadToast });
+      toast.error(getErrorMessage(err, "Failed to upload images"));
     } finally {
       setUploading(false);
       e.target.value = null;
@@ -163,7 +165,7 @@ const ProductFormModal = ({
       );
       toast.success("Image removed");
     } catch (err) {
-      toast.error("Failed to delete image");
+      toast.error(getErrorMessage(err, "Failed to remove image"));
     }
   };
 
@@ -180,7 +182,7 @@ const ProductFormModal = ({
       sessionImagesRef.current = [];
       toast.success("Cleared", { id: loadToast });
     } catch (err) {
-      toast.error("Cleanup error", { id: loadToast });
+      toast.error(getErrorMessage(err, "Failed to clear images"));
     }
   };
 
@@ -190,7 +192,7 @@ const ProductFormModal = ({
       onClose={onClose}
       loading={loading || uploading}
     >
-      <div className="bg-[#1a1c23] border border-white/10 rounded-3xl shadow-2xl w-full max-w-[640px] overflow-hidden flex flex-col h-[90vh] mx-auto">
+      <div className="bg-[#1a1c23] border border-white/10 rounded-3xl shadow-2xl w-full max-w-160 overflow-hidden flex flex-col h-[90vh] mx-auto">
         <div className="bg-[#242731] px-6 py-4 flex justify-between items-center border-b border-white/5 text-white">
           <h3 className="font-bold flex items-center gap-2 uppercase italic tracking-tighter">
             <Package className="text-primary w-5 h-5" />{" "}
@@ -375,7 +377,7 @@ const ProductFormModal = ({
                 {formData.images.map((img, i) => (
                   <div
                     key={i}
-                    className="relative w-24 h-24 rounded-xl overflow-hidden border border-white/10 group flex-shrink-0"
+                    className="relative w-24 h-24 rounded-xl overflow-hidden border border-white/10 group shrink-0"
                   >
                     <img
                       src={img.url || img}
