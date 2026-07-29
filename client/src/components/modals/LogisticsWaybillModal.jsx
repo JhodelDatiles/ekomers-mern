@@ -1,13 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Printer, X, Phone, Check } from "lucide-react";
 import ModalContainer from "./ModalContainer";
 
 const LogisticsWaybillModal = ({ order, isOpen, onClose }) => {
   const [checkedItems, setCheckedItems] = useState({});
-
-  useEffect(() => {
-    if (isOpen) setCheckedItems({});
-  }, [isOpen, order?._id]);
 
   const handlePrint = () => {
     if (!order) return;

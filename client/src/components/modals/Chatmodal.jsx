@@ -50,7 +50,7 @@ const ChatModal = ({ isOpen, onClose, order }) => {
     };
 
     init();
-  }, [isOpen, order?._id]);
+  }, [isOpen, order]);
 
   // ── Socket.IO events ──
   useEffect(() => {
@@ -88,7 +88,7 @@ const ChatModal = ({ isOpen, onClose, order }) => {
       socket.off("typing_stop", handleTypingStop);
       socket.off("conversation_closed", handleClosed);
     };
-  }, [socket, conversation?._id]);
+  }, [socket, conversation]);
 
   // ── Auto-scroll ──
   useEffect(() => {

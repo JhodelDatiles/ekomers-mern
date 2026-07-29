@@ -500,7 +500,7 @@ const AdminOrders = () => {
         </>
       )}
 
-      <LogisticsWaybillModal order={selectedOrder} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <LogisticsWaybillModal order={selectedOrder} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} key={selectedOrder?._id || 'empty'}/>
     </div>
   );
 };
