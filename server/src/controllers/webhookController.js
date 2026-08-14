@@ -1,40 +1,39 @@
-import crypto from 'crypto';
-import Order from '../models/orderSchema.js';
-import Cart from '../models/cartSchema.js';
-import Product from '../models/productSchema.js';
-import User from '../models/userSchema.js';
-import { sendOrderConfirmation } from '../services/emailService.js';
-import { config } from '../envconfig.js';
-
+import crypto from "crypto";
+import Order from "../models/orderSchema.js";
+import Cart from "../models/cartSchema.js";
+import Product from "../models/productSchema.js";
+import User from "../models/userSchema.js";
+import { sendOrderConfirmation } from "../services/emailService.js";
+import { config } from "../envconfig.js";
 
 export const handlePayMongoWebhook = async (req, res) => {
-  console.log('🚀 Webhook hit!');
+  console.log("🚀 Webhook hit!");
 
-  const signature = req.headers['paymongo-signature'];
+  const signature = req.headers["paymongo-signature"];
   const webhookSecret = config.paymongoWebhooks;
   const payload = req.rawBody;
 
   if (!signature || !payload) {
-    console.error('❌ Missing signature or payload');
-    return res.status(400).send('Missing Data');
+    console.error("❌ Missing signature or payload");
+    return res.status(400).send("Missing Data");
   }
 
   // 1. Verify webhook signature
-  const parts = signature.split(',');
-  const timestamp = parts.find(p => p.startsWith('t='))?.split('=')[1];
-  const testHash = parts.find(p => p.startsWith('te='))?.split('=')[1];
-  const liveHash = parts.find(p => p.startsWith('li='))?.split('=')[1];
+  const parts = signature.split(",");
+  const timestamp = parts.find((p) => p.startsWith("t="))?.split("=")[1];
+  const testHash = parts.find((p) => p.startsWith("te="))?.split("=")[1];
+  const liveHash = parts.find((p) => p.startsWith("li="))?.split("=")[1];
   const paymongoHash = liveHash || testHash;
 
   const baseString = `${timestamp}.${payload}`;
   const calculatedHash = crypto
-    .createHmac('sha256', webhookSecret)
+    .createHmac("sha256", webhookSecret)
     .update(baseString)
-    .digest('hex');
+    .digest("hex");
 
   if (calculatedHash !== paymongoHash) {
-    console.error('❌ Invalid webhook signature');
-    return res.status(401).send('Invalid signature');
+    console.error("❌ Invalid webhook signature");
+    return res.status(401).send("Invalid signature");
   }
 
   const event = req.body.data.attributes;
@@ -42,70 +41,93 @@ export const handlePayMongoWebhook = async (req, res) => {
   console.log(`📩 Event type: ${type}`);
 
   // ─── CHECKOUT SESSION (GCash, Card, Maya, GrabPay) ───
-  if (type === 'checkout_session.payment.paid') {
+  if (type === "checkout_session.payment.paid") {
     try {
       const session = event.data.attributes;
-      const { userId, fullName, address, city, postalCode, contactNumber, instructions, cartItemIds, directItemData } = session.metadata;
+      const {
+        userId,
+        fullName,
+        address,
+        city,
+        postalCode,
+        contactNumber,
+        instructions,
+        cartItemIds,
+        directItemData,
+      } = session.metadata;
 
-      const existing = await Order.findOne({ checkoutSessionId: event.data.id });
+      const existing = await Order.findOne({
+        checkoutSessionId: event.data.id,
+      });
       if (existing) {
-        console.log('⚠️ Duplicate checkout session, skipping');
+        console.log("⚠️ Duplicate checkout session, skipping");
         return res.status(200).json({ received: true });
       }
 
       let orderItems = [];
       let totalAmount = 0;
 
-      if (cartItemIds === 'DIRECT_BUY' && directItemData) {
+      if (cartItemIds === "DIRECT_BUY" && directItemData) {
         // ── DIRECT / BUY NOW ──
         const rawData = JSON.parse(directItemData);
-        orderItems = rawData.map(item => ({
+        orderItems = rawData.map((item) => ({
           productId: item.pId,
           name: item.n,
           price: item.pr,
           quantity: item.q,
-          size: item.s || 'N/A',
-          image: item.img
+          size: item.s || "N/A",
+          image: item.img,
         }));
-        totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-
+        totalAmount = orderItems.reduce(
+          (sum, i) => sum + i.price * i.quantity,
+          0,
+        );
       } else {
         // ── CART CHECKOUT — only process selected items ──
-        const targetIds = cartItemIds ? cartItemIds.split(',') : [];
-        const cart = await Cart.findOne({ userId }).populate('items.productId');
+        const targetIds = cartItemIds ? cartItemIds.split(",") : [];
+        const cart = await Cart.findOne({ userId }).populate("items.productId");
 
         if (!cart) {
-          console.error('❌ Cart not found for userId:', userId);
+          console.error("❌ Cart not found for userId:", userId);
           return res.status(200).json({ received: true });
         }
 
-        const purchasedItems = targetIds.length > 0
-          ? cart.items.filter(item => targetIds.includes(item._id.toString()))
-          : cart.items; // fallback if no IDs
+        const purchasedItems =
+          targetIds.length > 0
+            ? cart.items.filter((item) =>
+                targetIds.includes(item._id.toString()),
+              )
+            : cart.items; // fallback if no IDs
 
         if (purchasedItems.length === 0) {
-          console.error('❌ No matching cart items for IDs:', targetIds);
+          console.error("❌ No matching cart items for IDs:", targetIds);
           return res.status(200).json({ received: true });
         }
 
-        orderItems = purchasedItems.map(item => ({
+        orderItems = purchasedItems.map((item) => ({
           productId: item.productId._id,
           name: item.productId.name,
           quantity: item.quantity,
           price: item.price,
-          size: item.size || 'N/A',
-          image: item.productId?.images?.[0]?.url
+          size: item.size || "N/A",
+          image: item.productId?.images?.[0]?.url,
         }));
-        totalAmount = orderItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        totalAmount = orderItems.reduce(
+          (sum, i) => sum + i.price * i.quantity,
+          0,
+        );
 
         // Remove only purchased items from cart
         await Cart.findOneAndUpdate(
           { userId },
-          { $pull: { items: { _id: { $in: targetIds } } } }
+          { $pull: { items: { _id: { $in: targetIds } } } },
         );
         const updatedCart = await Cart.findOne({ userId });
         if (updatedCart) {
-          updatedCart.totalAmount = updatedCart.items.reduce((acc, i) => acc + i.quantity * i.price, 0);
+          updatedCart.totalAmount = updatedCart.items.reduce(
+            (acc, i) => acc + i.quantity * i.price,
+            0,
+          );
           await updatedCart.save();
         }
       }
@@ -113,8 +135,8 @@ export const handlePayMongoWebhook = async (req, res) => {
       // Deduct stock
       for (const item of orderItems) {
         await Product.updateOne(
-          { _id: item.productId, 'sizes.size': item.size },
-          { $inc: { 'sizes.$.stock': -item.quantity } }
+          { _id: item.productId, "sizes.size": item.size },
+          { $inc: { "sizes.$.stock": -item.quantity } },
         );
       }
 
@@ -123,26 +145,37 @@ export const handlePayMongoWebhook = async (req, res) => {
         checkoutSessionId: event.data.id,
         items: orderItems,
         totalAmount,
-        shippingInfo: { fullName, address, city, postalCode, contactNumber, deliveryInstructions: instructions },
-        paymentMethod: session.payment_method_used || 'gcash',
-        paymentStatus: 'paid',
-        status: 'Order in Progress'
+        shippingInfo: {
+          fullName,
+          address,
+          city,
+          postalCode,
+          contactNumber,
+          deliveryInstructions: instructions,
+        },
+        paymentMethod: session.payment_method_used || "gcash",
+        paymentStatus: "paid",
+        status: "Order in Progress",
       });
 
       try {
         const user = await User.findById(userId);
         if (user?.email) await sendOrderConfirmation(newOrder, user);
-      } catch (e) { console.error('📧 Email failed:', e.message); }
+      } catch (e) {
+        console.error("📧 Email failed:", e.message);
+      }
 
-      console.log(`✅ Checkout order created: ${newOrder._id} (${orderItems.length} items)`);
+      console.log(
+        `✅ Checkout order created: ${newOrder._id} (${orderItems.length} items)`,
+      );
     } catch (err) {
-      console.error('❌ Checkout webhook error:', err.message);
+      console.error("❌ Checkout webhook error:", err.message);
     }
     return res.status(200).json({ received: true });
   }
 
   // ─── PAYMENT PAID (QR PH via payment.paid event) ───
-  if (type === 'payment.paid') {
+  if (type === "payment.paid") {
     try {
       const payment = event.data;
       const paymentIntentId = payment.attributes?.payment_intent_id;
@@ -150,7 +183,7 @@ export const handlePayMongoWebhook = async (req, res) => {
       console.log(`💳 payment.paid — intent: ${paymentIntentId}`);
 
       if (!paymentIntentId) {
-        console.log('⚠️ No payment_intent_id on payment.paid event');
+        console.log("⚠️ No payment_intent_id on payment.paid event");
         return res.status(200).json({ received: true });
       }
 
@@ -161,7 +194,7 @@ export const handlePayMongoWebhook = async (req, res) => {
         return res.status(200).json({ received: true });
       }
 
-      if (pendingOrder.paymentStatus === 'paid') {
+      if (pendingOrder.paymentStatus === "paid") {
         console.log(`⚠️ Order already paid: ${pendingOrder._id}`);
         return res.status(200).json({ received: true });
       }
@@ -170,31 +203,42 @@ export const handlePayMongoWebhook = async (req, res) => {
       // which ignores direct assignment to createdAt on .save())
       await Order.updateOne(
         { _id: pendingOrder._id },
-        { $set: { paymentStatus: 'paid', status: 'Order in Progress', createdAt: new Date() } }
+        {
+          $set: {
+            paymentStatus: "paid",
+            status: "Order in Progress",
+            createdAt: new Date(),
+          },
+        },
       );
-      pendingOrder.paymentStatus = 'paid';
-      pendingOrder.status = 'Order in Progress';
+      pendingOrder.paymentStatus = "paid";
+      pendingOrder.status = "Order in Progress";
 
       // Deduct stock
       for (const item of pendingOrder.items) {
         if (item.productId && item.size) {
           await Product.updateOne(
-            { _id: item.productId, 'sizes.size': item.size },
-            { $inc: { 'sizes.$.stock': -item.quantity } }
+            { _id: item.productId, "sizes.size": item.size },
+            { $inc: { "sizes.$.stock": -item.quantity } },
           );
         }
       }
 
       // Only remove paid items from cart (skip for direct/buy-now)
       if (!pendingOrder.isDirectPurchase) {
-        const paidProductIds = pendingOrder.items.map(i => String(i.productId));
+        const paidProductIds = pendingOrder.items.map((i) =>
+          String(i.productId),
+        );
         await Cart.findOneAndUpdate(
           { userId: pendingOrder.userId },
-          { $pull: { items: { productId: { $in: paidProductIds } } } }
+          { $pull: { items: { productId: { $in: paidProductIds } } } },
         );
         const updatedCart = await Cart.findOne({ userId: pendingOrder.userId });
         if (updatedCart) {
-          updatedCart.totalAmount = updatedCart.items.reduce((acc, item) => acc + item.quantity * item.price, 0);
+          updatedCart.totalAmount = updatedCart.items.reduce(
+            (acc, item) => acc + item.quantity * item.price,
+            0,
+          );
           await updatedCart.save();
         }
       }
@@ -202,11 +246,15 @@ export const handlePayMongoWebhook = async (req, res) => {
       try {
         const user = await User.findById(pendingOrder.userId);
         if (user?.email) await sendOrderConfirmation(pendingOrder, user);
-      } catch (e) { console.error('📧 Email failed:', e.message); }
+      } catch (e) {
+        console.error("📧 Email failed:", e.message);
+      }
 
-      console.log(`✅ QR PH order confirmed via payment.paid: ${pendingOrder._id}`);
+      console.log(
+        `✅ QR PH order confirmed via payment.paid: ${pendingOrder._id}`,
+      );
     } catch (err) {
-      console.error('❌ payment.paid webhook error:', err.message);
+      console.error("❌ payment.paid webhook error:", err.message);
     }
     return res.status(200).json({ received: true });
   }
