@@ -45,8 +45,6 @@ export const updateProfile = async (req, res) => {
   }
 };
 
-// ... getProfile and updateProfile remain the same ...
-
 // @desc    Step 1: Request OTP for sensitive actions
 // src/controllers/userController.js
 export const requestSecurityCode = async (req, res) => {

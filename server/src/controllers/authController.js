@@ -23,10 +23,11 @@ const setTokenCookies = (res, user) => {
   const accessToken = jwt.sign(
     { id: user._id, role: user.role, tokenVersion: user.tokenVersion }, // Payload
     process.env.ACCESS_SECRET, // Secret used for Signature
-    {     expiresIn: "15m",       // Goes to Payload configuration
-    algorithm: "HS256",     // Goes to Header configuration
-    header: { typ: "JWT" }  // Correct way to explicitly pass header fields! }, // Library automatically converts this to standard Header properties (like algorithm 'HS256')
-    }
+    {
+      expiresIn: "15m", // Goes to Payload configuration
+      algorithm: "HS256", // Goes to Header configuration
+      header: { typ: "JWT" }, // Correct way to explicitly pass header fields! }, // Library automatically converts this to standard Header properties (like algorithm 'HS256')
+    },
   );
   const refreshToken = jwt.sign(
     { id: user._id, tokenVersion: user.tokenVersion },
@@ -94,6 +95,7 @@ export const refreshToken = async (req, res) => {
     res.status(401).json({ message: "Invalid refresh token" });
   }
 };
+
 export const register = async (req, res) => {
   try {
     const { email, password, username } = req.body;
