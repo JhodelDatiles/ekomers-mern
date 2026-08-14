@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 #hide the env file 
 .env
+repomix-output.xml
+repomix-output.txt
