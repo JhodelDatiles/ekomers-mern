@@ -146,14 +146,14 @@ server/
         adminUserController.js
       chats/
         aiChatController.js
-        chatController.js
+        supportChatController.js
       authController.js
       cartController.js
-      orderController.js
-      paymentController.js
+      cloudinaryUploadController.js
+      customerOrderController.js
       productController.js
-      uploadController.js
-      userController.js
+      qrPhController.js
+      userProfileController.js
       webhookController.js
       wishlistController.js
     middlewares/
@@ -200,6 +200,816 @@ package.json
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="server/src/controllers/chats/supportChatController.js">
+import Conversation from '../../models/Conversationschema.js';
+import Message from '../../models/Messageschema.js';
+import Order from '../../models/orderSchema.js';
+
+// ─────────────────────────────────────────────────────────────────
+// USER: Get or create a conversation for a specific order
+// POST /api/chat/conversations
+// Body: { orderId }
+// ─────────────────────────────────────────────────────────────────
+export const getOrCreateConversation = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const userId = req.user.id;
+
+    if (!orderId) {
+      return res.status(400).json({ message: 'orderId is required' });
+    }
+
+    // Verify the order belongs to this user
+    const order = await Order.findOne({ _id: orderId, userId });
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // Return existing conversation if one exists for this order
+    let conversation = await Conversation.findOne({ orderId, userId });
+
+    if (!conversation) {
+      conversation = await Conversation.create({
+        userId,
+        orderId,
+        orderSnapshot: {
+          orderId: order.orderId,
+          totalAmount: order.totalAmount,
+          status: order.status,
+          itemCount: order.items?.length || 0
+        },
+        subject: `Order #${order.orderId || order._id.toString().slice(-8).toUpperCase()}`
+      });
+    }
+
+    res.status(200).json(conversation);
+  } catch (error) {
+    console.error('getOrCreateConversation error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// USER: Get all conversations for the logged-in user
+// GET /api/chat/conversations
+// ─────────────────────────────────────────────────────────────────
+export const getUserConversations = async (req, res) => {
+  try {
+    const conversations = await Conversation.find({ userId: req.user.id })
+      .sort({ lastMessageAt: -1 });
+    res.status(200).json(conversations);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// ADMIN: Get all conversations across all users
+// GET /api/chat/admin/conversations
+// ─────────────────────────────────────────────────────────────────
+export const getAllConversations = async (req, res) => {
+  try {
+    const conversations = await Conversation.find({})
+      .populate('userId', 'username email profilePic')
+      .sort({ lastMessageAt: -1 });
+    res.status(200).json(conversations);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Get messages for a conversation
+// GET /api/chat/conversations/:id/messages
+// ─────────────────────────────────────────────────────────────────
+export const getMessages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const isAdmin = req.user.role === 'admin';
+
+    // Security: non-admins can only read their own conversations
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+    if (!isAdmin && String(conversation.userId) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const messages = await Message.find({ conversationId: id })
+      .sort({ createdAt: 1 })
+      .populate('senderId', 'username profilePic');
+
+    res.status(200).json(messages);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Send a message (user or admin)
+// POST /api/chat/conversations/:id/messages
+// Body: { content }
+// ─────────────────────────────────────────────────────────────────
+export const sendMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!content?.trim()) {
+      return res.status(400).json({ message: 'Message content is required' });
+    }
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    // Security: non-admins can only message their own conversations
+    if (!isAdmin && String(conversation.userId) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    if (conversation.status === 'closed') {
+      return res.status(400).json({ message: 'This conversation is closed.' });
+    }
+
+    const message = await Message.create({
+      conversationId: id,
+      senderId: req.user.id,
+      senderRole: isAdmin ? 'admin' : 'user',
+      content: content.trim()
+    });
+
+    // Update conversation metadata
+    conversation.lastMessage = content.trim().slice(0, 100);
+    conversation.lastMessageAt = new Date();
+    if (isAdmin) {
+      conversation.unreadByUser += 1;
+      conversation.unreadByAdmin = 0; // Admin read by sending
+    } else {
+      conversation.unreadByAdmin += 1;
+      conversation.unreadByUser = 0; // User read by sending
+    }
+    await conversation.save();
+
+    const populated = await message.populate('senderId', 'username profilePic');
+
+    // Emit via Socket.IO if available
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv_${id}`).emit('new_message', populated);
+      // Notify admin room of unread count change
+      if (!isAdmin) {
+        io.to('admins').emit('conversation_updated', {
+          conversationId: id,
+          lastMessage: conversation.lastMessage,
+          unreadByAdmin: conversation.unreadByAdmin
+        });
+      }
+    }
+
+    res.status(201).json(populated);
+  } catch (error) {
+    console.error('sendMessage error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Mark conversation as read (from the perspective of the caller)
+// PUT /api/chat/conversations/:id/read
+// ─────────────────────────────────────────────────────────────────
+export const markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const isAdmin = req.user.role === 'admin';
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) return res.status(404).json({ message: 'Not found' });
+
+    if (isAdmin) {
+      conversation.unreadByAdmin = 0;
+    } else {
+      conversation.unreadByUser = 0;
+    }
+    await conversation.save();
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// ADMIN: Close a conversation
+// PUT /api/chat/admin/conversations/:id/close
+// ─────────────────────────────────────────────────────────────────
+export const closeConversation = async (req, res) => {
+  try {
+    const conversation = await Conversation.findByIdAndUpdate(
+      req.params.id,
+      { status: 'closed' },
+      { new: true }
+    );
+    if (!conversation) return res.status(404).json({ message: 'Not found' });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conv_${req.params.id}`).emit('conversation_closed', { conversationId: req.params.id });
+    }
+
+    res.status(200).json(conversation);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Get total unread count for the logged-in user/admin
+// GET /api/chat/unread-count
+// ─────────────────────────────────────────────────────────────────
+export const getUnreadCount = async (req, res) => {
+  try {
+    const isAdmin = req.user.role === 'admin';
+
+    let count;
+    if (isAdmin) {
+      // Sum all unreadByAdmin across all open conversations
+      const result = await Conversation.aggregate([
+        { $match: { status: 'open' } },
+        { $group: { _id: null, total: { $sum: '$unreadByAdmin' } } }
+      ]);
+      count = result[0]?.total || 0;
+    } else {
+      const result = await Conversation.aggregate([
+        { $match: { userId: req.user._id, status: 'open' } },
+        { $group: { _id: null, total: { $sum: '$unreadByUser' } } }
+      ]);
+      count = result[0]?.total || 0;
+    }
+
+    res.status(200).json({ count });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+</file>
+
+<file path="server/src/controllers/cloudinaryUploadController.js">
+import User from "../models/userSchema.js";
+import { v2 as cloudinary } from "cloudinary";
+
+export const uploadImage = async (req, res) => {
+  try {
+    if (!req.file)
+      return res.status(400).json({ message: "No image uploaded" });
+
+    // 1. Find the user to get the old publicId
+    const user = await User.findById(req.user.id);
+    const oldPublicId = user?.profilePic?.publicId;
+
+    // 2. Update the User document immediately with the new image data
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        profilePic: {
+          url: req.file.path,
+          publicId: req.file.filename,
+        },
+      },
+      { new: true },
+    ).select("-password");
+
+    // 3. Cleanup: If an old image existed, delete it from Cloudinary
+    if (oldPublicId) {
+      try {
+        await cloudinary.uploader.destroy(oldPublicId);
+        console.log("Cloudinary: Old image replaced and deleted.");
+      } catch (err) {
+        console.error("Cloudinary Cleanup Failed:", err);
+      }
+    }
+
+    res.status(200).json({
+      message: "Profile picture updated successfully",
+      profilePic: updatedUser.profilePic,
+      user: updatedUser, // Return user so frontend can update global state
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Upload failed", error: error.message });
+  }
+};
+
+export const uploadMultipleImages = async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: "No images provided" });
+    }
+
+    const images = req.files.map((file) => ({
+      url: file.path,
+      publicId: file.filename,
+    }));
+
+    res.status(200).json({
+      success: true,
+      images,
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({
+        message: "Server failed to process images",
+        error: error.message,
+      });
+  }
+};
+
+export const deleteImage = async (req, res) => {
+  try {
+    const { publicId } = req.body;
+    if (!publicId)
+      return res.status(400).json({ message: "No publicId provided" });
+
+    // Core Cloudinary destruction
+    const result = await cloudinary.uploader.destroy(publicId);
+
+    res.status(200).json({ message: "Image deleted successfully", result });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Image deletion failed" });
+  }
+};
+</file>
+
+<file path="server/src/controllers/customerOrderController.js">
+import axios from "axios";
+import crypto from "crypto";
+import Order from "../models/orderSchema.js";
+import Cart from "../models/cartSchema.js";
+import Product from "../models/productSchema.js";
+import User from "../models/userSchema.js";
+import { sendOrderConfirmation } from "../services/emailService.js";
+import { config } from "../envconfig.js";
+
+export const initiatePayMongoCheckout = async (req, res) => {
+  try {
+    const { items, shippingInfo, isDirectPurchase } = req.body;
+
+    if (!items || items.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "No items selected for checkout" });
+    }
+
+    const isDirect =
+      isDirectPurchase ||
+      (items[0]?._id && String(items[0]._id).startsWith("direct"));
+
+    const metadata = {
+      userId: String(req.user.id),
+      cartItemIds: isDirect
+        ? "DIRECT_BUY"
+        : items.map((item) => item._id).join(","),
+      directItemData: isDirect
+        ? JSON.stringify(
+            items.map((item) => ({
+              pId: item.productId?._id || item.productId,
+              n: item.productId?.name || item.name,
+              pr: item.price,
+              q: item.quantity,
+              s: item.size,
+              img:
+                item.productId?.images?.[0]?.url ||
+                item.productId?.images?.[0] ||
+                item.image,
+            })),
+          )
+        : "",
+      fullName: String(shippingInfo.fullName || ""),
+      address: String(shippingInfo.address || ""),
+      city: String(shippingInfo.city || ""),
+      postalCode: String(shippingInfo.postalCode || ""),
+      contactNumber: String(shippingInfo.contactNumber || ""),
+      instructions: String(shippingInfo.deliveryInstructions || ""),
+    };
+
+    const secretKey = config.paymongoSecret.trim();
+    const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
+
+    const lineItems = items.map((item) => ({
+      currency: "PHP",
+      amount: Math.round(item.price * 100),
+      name: item.productId?.name || item.name,
+      quantity: item.quantity,
+      description: `Size: ${item.size || "N/A"}`,
+    }));
+
+    const options = {
+      method: "POST",
+      url: "https://api.paymongo.com/v1/checkout_sessions",
+      headers: {
+        accept: "application/json",
+        "Content-Type": "application/json",
+        authorization: authHeader,
+      },
+      data: {
+        data: {
+          attributes: {
+            send_email_receipt: true,
+            show_line_items: true,
+            payment_method_types: ["gcash", "paymaya", "card", "grab_pay"],
+            line_items: lineItems,
+            success_url: `${config.clientUrl}/payment-success`,
+            cancel_url: `${config.clientUrl}/checkout?payment=cancelled`,
+            metadata: metadata,
+          },
+        },
+      },
+    };
+
+    const response = await axios.request(options);
+    res
+      .status(200)
+      .json({ checkoutUrl: response.data.data.attributes.checkout_url });
+  } catch (error) {
+    console.error("❌ PAYMONGO ERROR:", error.response?.data || error.message);
+    res.status(500).json({ message: "Payment initialization failed" });
+  }
+};
+
+export const getUserOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({ userId: req.user.id })
+      .sort({ createdAt: -1 })
+      .populate("items.productId", "name images");
+    res.status(200).json({ orders });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching orders" });
+  }
+};
+
+export const getOrderById = async (req, res) => {
+  try {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+    }).populate("items.productId", "name images price");
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.status(200).json(order);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching order" });
+  }
+};
+
+export const confirmDelivery = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    order.status = "Delivered";
+    await order.save();
+    res.status(200).json(order);
+  } catch (error) {
+    console.error("Validation Error:", error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteOrder = async (req, res) => {
+  try {
+    await Order.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: "Order purged from manifest" });
+  } catch (error) {
+    res.status(500).json({ message: "Server error during deletion" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
+// CANCEL ORDER — auto-approve, restore stock, trigger PayMongo refund
+// User can cancel anytime before shipment is arranged
+// ─────────────────────────────────────────────────────────────────
+export const cancelOrder = async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    // Validate reason is provided
+    if (!reason || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ message: "Cancellation reason is required." });
+    }
+
+    const order = await Order.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found." });
+    }
+
+    // Block cancellation if already shipped or beyond
+    const blockedStatuses = [
+      "Shipped/In Transit",
+      "Out for Delivery",
+      "Delivered",
+      "Completed",
+      "Cancelled",
+    ];
+    if (blockedStatuses.includes(order.status)) {
+      return res.status(400).json({
+        message: "Cannot cancel — order has already been shipped or completed.",
+      });
+    }
+
+    // ── 1. RESTORE STOCK ──
+    const stockUpdates = order.items.map((item) => {
+      if (!item.productId) return Promise.resolve();
+      return Product.updateOne(
+        { _id: item.productId, "sizes.size": item.size },
+        { $inc: { "sizes.$.stock": item.quantity } }, // +quantity to restore
+      );
+    });
+    await Promise.all(stockUpdates);
+    console.log(`✅ Stock restored for order ${order._id}`);
+
+    // ── 2. PAYMONGO REFUND (only for supported payment methods) ──
+    // QR PH (InstaPay/PESONet) and GrabPay cannot be refunded via API.
+    // Those require manual bank transfer back to the customer.
+    const AUTO_REFUNDABLE = ["gcash", "paymaya", "card"];
+    const canAutoRefund =
+      order.paymentStatus === "paid" &&
+      AUTO_REFUNDABLE.includes(order.paymentMethod);
+    const needsManualRefund = order.paymentStatus === "paid" && !canAutoRefund;
+
+    let refundId = null;
+
+    if (canAutoRefund) {
+      try {
+        const secretKey = config.paymongoSecret.trim();
+        const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
+
+        // Get the actual payment ID from the checkout session
+        let paymentId = null;
+        if (order.checkoutSessionId) {
+          const sessionRes = await axios.get(
+            `https://api.paymongo.com/v1/checkout_sessions/${order.checkoutSessionId}`,
+            { headers: { authorization: authHeader } },
+          );
+          const payments = sessionRes.data.data.attributes.payments;
+          if (payments && payments.length > 0) {
+            paymentId = payments[0].id;
+          }
+        }
+
+        if (paymentId) {
+          const refundRes = await axios.post(
+            "https://api.paymongo.com/v1/refunds",
+            {
+              data: {
+                attributes: {
+                  amount: Math.round(order.totalAmount * 100),
+                  payment_id: paymentId,
+                  reason: "others",
+                  notes: reason.trim(),
+                },
+              },
+            },
+            {
+              headers: {
+                authorization: authHeader,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+          refundId = refundRes.data.data.id;
+          console.log(
+            `💸 PayMongo refund triggered: ${refundId} for order ${order._id}`,
+          );
+        } else {
+          console.warn(
+            `⚠️ Could not find payment ID for order ${order._id} — refund skipped`,
+          );
+        }
+      } catch (refundErr) {
+        console.error(
+          `❌ PayMongo refund failed for order ${order._id}:`,
+          refundErr.response?.data || refundErr.message,
+        );
+      }
+    } else if (needsManualRefund) {
+      // QR PH / GrabPay — log it so admin knows to refund manually
+      console.log(
+        `⚠️ Manual refund required for order ${order._id} (method: ${order.paymentMethod}, amount: ₱${order.totalAmount})`,
+      );
+    }
+
+    // ── 3. UPDATE ORDER ──
+    order.status = "Cancelled";
+    order.paymentStatus = refundId
+      ? "refunded"
+      : needsManualRefund
+        ? "refund_pending"
+        : order.paymentStatus;
+    order.cancellationReason = reason.trim();
+    order.cancelledAt = new Date();
+    order.refundId = refundId;
+    await order.save();
+
+    console.log(
+      `✅ Order ${order._id} cancelled. Reason: "${reason}". Refund: ${refundId || (needsManualRefund ? "MANUAL REQUIRED" : "N/A")}`,
+    );
+
+    res.status(200).json({
+      message: "Order cancelled successfully.",
+      refundTriggered: !!refundId,
+      needsManualRefund,
+      refundId,
+      order,
+    });
+  } catch (error) {
+    console.error("❌ CANCEL ERROR:", error);
+    res.status(500).json({ message: "Failed to cancel order." });
+  }
+};
+</file>
+
+<file path="server/src/controllers/qrPhController.js">
+import { config } from "../envconfig.js";
+import axios from "axios";
+import Order from "../models/orderSchema.js";
+import Cart from "../models/cartSchema.js";
+import Product from "../models/productSchema.js";
+import User from "../models/userSchema.js";
+import { sendOrderConfirmation } from "../services/emailService.js";
+
+// ── from old paymentController.js ──
+export const createQrPhPayment = async (req, res) => {
+  // ...paste body unchanged from paymentController.js
+};
+
+export const checkPaymentIntentStatus = async (req, res) => {
+  // ...paste body unchanged from paymentController.js
+};
+
+// ── from old orderController.js ──
+export const confirmQrPhOrder = async (req, res) => {
+  // ...paste body unchanged from orderController.js
+};
+
+export const getOrderByPaymentIntent = async (req, res) => {
+  // ...paste body unchanged from orderController.js
+};
+</file>
+
+<file path="server/src/controllers/userProfileController.js">
+import User from "../models/userSchema.js";
+import { v2 as cloudinary } from "cloudinary"; 
+import { sendSecurityCode } from "../services/emailService.js";
+import bcrypt from "bcrypt";
+import { getCookieOptions } from "./authController.js";
+
+//---------- GET USER ----------
+export const getProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.status(200).json(user);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+//---------- UPDATE USER PROFILE ----------
+export const updateProfile = async (req, res) => {
+  try {
+    const { fullName, phone, address, profilePic, username, gender, dob } =
+      req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Update standard profile fields
+    if (username) user.username = username;
+    if (fullName) user.fullName = fullName;
+    if (phone) user.phone = phone;
+    if (gender) user.gender = gender;
+    if (dob) user.dob = dob;
+
+    // Standardize Address Array
+    if (address && Array.isArray(address)) {
+      user.address = address;
+      // Tells Mongoose to deep-check the array for changes
+      user.markModified("address");
+    }
+
+    await user.save();
+    res.status(200).json({ message: "Profile synchronized", user });
+  } catch (error) {
+    res.status(500).json({ message: "Update failed", error: error.message });
+  }
+};
+
+// @desc    Step 1: Request OTP for sensitive actions
+// src/controllers/userProfileController.js
+export const requestSecurityCode = async (req, res) => {
+  try {
+    const { type } = req.body;
+    const user = await User.findById(req.user.id);
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    user.verificationCode = code;
+    user.codeExpires = Date.now() + 10 * 60 * 1000;
+    await user.save();
+
+    console.log("Attempting to send email to:", user.email); // LOG 1
+
+    const emailSent = await sendSecurityCode(user, code, type);
+
+    if (!emailSent) {
+      console.log("Email service returned FALSE"); // LOG 2
+      return res.status(500).json({ message: "Email service failed" });
+    }
+
+    res.status(200).json({ message: "Code sent!" });
+  } catch (error) {
+    console.error("CRASH IN REQUEST_CODE:", error); // LOG 3
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const verifyPasswordChange = async (req, res) => {
+  try {
+    const { current, new: newPassword, code } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (user.verificationCode !== code || Date.now() > user.codeExpires) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired security code" });
+    }
+
+    const isMatch = await bcrypt.compare(current, user.password);
+    if (!isMatch)
+      return res.status(400).json({ message: "Current password incorrect" });
+
+    // ❌ REMOVE THESE TWO LINES (The "Double Hash" Bug)
+    // const salt = await bcrypt.genSalt(10);
+    // user.password = await bcrypt.hash(newPassword, salt);
+
+    // ✅ REPLACE WITH THIS:
+    user.password = newPassword; // Set plain text, let UserSchema handle hashing
+
+    // Clear OTP fields
+    user.verificationCode = undefined;
+    user.codeExpires = undefined;
+    user.tokenVersion += 1;
+
+    await user.save(); // This triggers userSchema.pre('save') which hashes it ONCE.
+    const cookieOptions = getCookieOptions();
+
+    res.clearCookie("accessToken", cookieOptions);
+    res.clearCookie("refreshToken", cookieOptions);
+
+    return res.status(200).json({
+      message: "Password updated successfully",
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Step 2b: Verify OTP and Delete Account
+export const verifyAccountDeletion = async (req, res) => {
+  try {
+    const { code } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (user.verificationCode !== code || Date.now() > user.codeExpires) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired security code" });
+    }
+
+    if (user.profilePic?.publicId) {
+      await cloudinary.uploader.destroy(user.profilePic.publicId);
+    }
+
+    await User.findByIdAndDelete(req.user.id);
+
+    const cookieOptions = getCookieOptions();
+    res.clearCookie("accessToken", cookieOptions);
+    res.clearCookie("refreshToken", cookieOptions);
+
+    res.status(200).json({ message: "Account successfully terminated" });
+  } catch (error) {
+    res.status(500).json({ message: "Deletion failed" });
+  }
+};
+</file>
 
 <file path="server/src/routes/aiChatRoutes.js">
 import express from 'express';
@@ -4254,263 +5064,6 @@ export const aiChat = async (req, res) => {
 };
 </file>
 
-<file path="server/src/controllers/chats/chatController.js">
-import Conversation from '../../models/Conversationschema.js';
-import Message from '../../models/Messageschema.js';
-import Order from '../../models/orderSchema.js';
-
-// ─────────────────────────────────────────────────────────────────
-// USER: Get or create a conversation for a specific order
-// POST /api/chat/conversations
-// Body: { orderId }
-// ─────────────────────────────────────────────────────────────────
-export const getOrCreateConversation = async (req, res) => {
-  try {
-    const { orderId } = req.body;
-    const userId = req.user.id;
-
-    if (!orderId) {
-      return res.status(400).json({ message: 'orderId is required' });
-    }
-
-    // Verify the order belongs to this user
-    const order = await Order.findOne({ _id: orderId, userId });
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
-
-    // Return existing conversation if one exists for this order
-    let conversation = await Conversation.findOne({ orderId, userId });
-
-    if (!conversation) {
-      conversation = await Conversation.create({
-        userId,
-        orderId,
-        orderSnapshot: {
-          orderId: order.orderId,
-          totalAmount: order.totalAmount,
-          status: order.status,
-          itemCount: order.items?.length || 0
-        },
-        subject: `Order #${order.orderId || order._id.toString().slice(-8).toUpperCase()}`
-      });
-    }
-
-    res.status(200).json(conversation);
-  } catch (error) {
-    console.error('getOrCreateConversation error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// USER: Get all conversations for the logged-in user
-// GET /api/chat/conversations
-// ─────────────────────────────────────────────────────────────────
-export const getUserConversations = async (req, res) => {
-  try {
-    const conversations = await Conversation.find({ userId: req.user.id })
-      .sort({ lastMessageAt: -1 });
-    res.status(200).json(conversations);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// ADMIN: Get all conversations across all users
-// GET /api/chat/admin/conversations
-// ─────────────────────────────────────────────────────────────────
-export const getAllConversations = async (req, res) => {
-  try {
-    const conversations = await Conversation.find({})
-      .populate('userId', 'username email profilePic')
-      .sort({ lastMessageAt: -1 });
-    res.status(200).json(conversations);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// Get messages for a conversation
-// GET /api/chat/conversations/:id/messages
-// ─────────────────────────────────────────────────────────────────
-export const getMessages = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const isAdmin = req.user.role === 'admin';
-
-    // Security: non-admins can only read their own conversations
-    const conversation = await Conversation.findById(id);
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
-    }
-    if (!isAdmin && String(conversation.userId) !== String(req.user.id)) {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    const messages = await Message.find({ conversationId: id })
-      .sort({ createdAt: 1 })
-      .populate('senderId', 'username profilePic');
-
-    res.status(200).json(messages);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// Send a message (user or admin)
-// POST /api/chat/conversations/:id/messages
-// Body: { content }
-// ─────────────────────────────────────────────────────────────────
-export const sendMessage = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { content } = req.body;
-    const isAdmin = req.user.role === 'admin';
-
-    if (!content?.trim()) {
-      return res.status(400).json({ message: 'Message content is required' });
-    }
-
-    const conversation = await Conversation.findById(id);
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
-    }
-
-    // Security: non-admins can only message their own conversations
-    if (!isAdmin && String(conversation.userId) !== String(req.user.id)) {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    if (conversation.status === 'closed') {
-      return res.status(400).json({ message: 'This conversation is closed.' });
-    }
-
-    const message = await Message.create({
-      conversationId: id,
-      senderId: req.user.id,
-      senderRole: isAdmin ? 'admin' : 'user',
-      content: content.trim()
-    });
-
-    // Update conversation metadata
-    conversation.lastMessage = content.trim().slice(0, 100);
-    conversation.lastMessageAt = new Date();
-    if (isAdmin) {
-      conversation.unreadByUser += 1;
-      conversation.unreadByAdmin = 0; // Admin read by sending
-    } else {
-      conversation.unreadByAdmin += 1;
-      conversation.unreadByUser = 0; // User read by sending
-    }
-    await conversation.save();
-
-    const populated = await message.populate('senderId', 'username profilePic');
-
-    // Emit via Socket.IO if available
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`conv_${id}`).emit('new_message', populated);
-      // Notify admin room of unread count change
-      if (!isAdmin) {
-        io.to('admins').emit('conversation_updated', {
-          conversationId: id,
-          lastMessage: conversation.lastMessage,
-          unreadByAdmin: conversation.unreadByAdmin
-        });
-      }
-    }
-
-    res.status(201).json(populated);
-  } catch (error) {
-    console.error('sendMessage error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// Mark conversation as read (from the perspective of the caller)
-// PUT /api/chat/conversations/:id/read
-// ─────────────────────────────────────────────────────────────────
-export const markAsRead = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const isAdmin = req.user.role === 'admin';
-
-    const conversation = await Conversation.findById(id);
-    if (!conversation) return res.status(404).json({ message: 'Not found' });
-
-    if (isAdmin) {
-      conversation.unreadByAdmin = 0;
-    } else {
-      conversation.unreadByUser = 0;
-    }
-    await conversation.save();
-
-    res.status(200).json({ success: true });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// ADMIN: Close a conversation
-// PUT /api/chat/admin/conversations/:id/close
-// ─────────────────────────────────────────────────────────────────
-export const closeConversation = async (req, res) => {
-  try {
-    const conversation = await Conversation.findByIdAndUpdate(
-      req.params.id,
-      { status: 'closed' },
-      { new: true }
-    );
-    if (!conversation) return res.status(404).json({ message: 'Not found' });
-
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`conv_${req.params.id}`).emit('conversation_closed', { conversationId: req.params.id });
-    }
-
-    res.status(200).json(conversation);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// Get total unread count for the logged-in user/admin
-// GET /api/chat/unread-count
-// ─────────────────────────────────────────────────────────────────
-export const getUnreadCount = async (req, res) => {
-  try {
-    const isAdmin = req.user.role === 'admin';
-
-    let count;
-    if (isAdmin) {
-      // Sum all unreadByAdmin across all open conversations
-      const result = await Conversation.aggregate([
-        { $match: { status: 'open' } },
-        { $group: { _id: null, total: { $sum: '$unreadByAdmin' } } }
-      ]);
-      count = result[0]?.total || 0;
-    } else {
-      const result = await Conversation.aggregate([
-        { $match: { userId: req.user._id, status: 'open' } },
-        { $group: { _id: null, total: { $sum: '$unreadByUser' } } }
-      ]);
-      count = result[0]?.total || 0;
-    }
-
-    res.status(200).json({ count });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-</file>
-
 <file path="server/src/middlewares/passwordValidation.js">
 // passwordValidation.js
 import { body, validationResult } from 'express-validator';
@@ -5062,21 +5615,31 @@ export default router;
 </file>
 
 <file path="server/src/routes/uploadRoutes.js">
-import express from 'express';
-import { uploadImage, uploadMultipleImages, deleteImage } from '../controllers/uploadController.js';
-import { upload } from '../config/cloudinary.js';
-import { protect, adminOnly } from '../middlewares/protect.js';
+import express from "express";
+import {
+  uploadImage,
+  uploadMultipleImages,
+  deleteImage,
+} from "../controllers/cloudinaryUploadController.js";
+import { upload } from "../config/cloudinary.js";
+import { protect, adminOnly } from "../middlewares/protect.js";
 
 const router = express.Router();
 
 // Single image upload
-router.post('/single', protect, upload.single('image'), uploadImage);
+router.post("/single", protect, upload.single("image"), uploadImage);
 
 // Multiple images upload (max 5)
-router.post('/multiple', protect, adminOnly, upload.array('images', 5), uploadMultipleImages);
+router.post(
+  "/multiple",
+  protect,
+  adminOnly,
+  upload.array("images", 5),
+  uploadMultipleImages,
+);
 
 // Delete image
-router.delete('/delete', protect, adminOnly, deleteImage);
+router.delete("/delete", protect, adminOnly, deleteImage);
 
 export default router;
 </file>
@@ -7085,93 +7648,6 @@ const conn = async () => {
 export default conn;
 </file>
 
-<file path="server/src/controllers/uploadController.js">
-import User from "../models/userSchema.js";
-import { v2 as cloudinary } from "cloudinary";
-
-export const uploadImage = async (req, res) => {
-  try {
-    if (!req.file)
-      return res.status(400).json({ message: "No image uploaded" });
-
-    // 1. Find the user to get the old publicId
-    const user = await User.findById(req.user.id);
-    const oldPublicId = user?.profilePic?.publicId;
-
-    // 2. Update the User document immediately with the new image data
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user.id,
-      {
-        profilePic: {
-          url: req.file.path,
-          publicId: req.file.filename,
-        },
-      },
-      { new: true },
-    ).select("-password");
-
-    // 3. Cleanup: If an old image existed, delete it from Cloudinary
-    if (oldPublicId) {
-      try {
-        await cloudinary.uploader.destroy(oldPublicId);
-        console.log("Cloudinary: Old image replaced and deleted.");
-      } catch (err) {
-        console.error("Cloudinary Cleanup Failed:", err);
-      }
-    }
-
-    res.status(200).json({
-      message: "Profile picture updated successfully",
-      profilePic: updatedUser.profilePic,
-      user: updatedUser, // Return user so frontend can update global state
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Upload failed", error: error.message });
-  }
-};
-
-export const uploadMultipleImages = async (req, res) => {
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: "No images provided" });
-    }
-
-    const images = req.files.map((file) => ({
-      url: file.path,
-      publicId: file.filename,
-    }));
-
-    res.status(200).json({
-      success: true,
-      images,
-    });
-  } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Server failed to process images",
-        error: error.message,
-      });
-  }
-};
-
-export const deleteImage = async (req, res) => {
-  try {
-    const { publicId } = req.body;
-    if (!publicId)
-      return res.status(400).json({ message: "No publicId provided" });
-
-    // Core Cloudinary destruction
-    const result = await cloudinary.uploader.destroy(publicId);
-
-    res.status(200).json({ message: "Image deleted successfully", result });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Image deletion failed" });
-  }
-};
-</file>
-
 <file path="server/src/middlewares/protect.js">
 import jwt from "jsonwebtoken";
 import User from "../models/userSchema.js";
@@ -7261,7 +7737,6 @@ export default router;
 </file>
 
 <file path="server/src/routes/userRoutes.js">
-// userRoutes.js
 import express from 'express';
 import { 
   getProfile, 
@@ -7269,7 +7744,7 @@ import {
   requestSecurityCode, 
   verifyPasswordChange, 
   verifyAccountDeletion // Make sure this matches the controller
-} from '../controllers/userController.js';
+} from '../controllers/userProfileController.js';
 import { protect } from '../middlewares/protect.js';
 import {forgotPasswordLimiter} from "../middlewares/rateLimiter.js"
 import {validatePassword} from "../middlewares/passwordValidation.js"
@@ -9904,7 +10379,7 @@ import {
   markAsRead,
   closeConversation,
   getUnreadCount
-} from '../controllers/chats/chatController.js';
+} from '../controllers/chats/supportChatController.js';
 import { protect, adminOnly } from '../middlewares/protect.js';
 
 const router = express.Router();
@@ -10850,152 +11325,6 @@ export const clearCart = async (req, res) => {
 };
 </file>
 
-<file path="server/src/controllers/userController.js">
-import User from "../models/userSchema.js";
-import { v2 as cloudinary } from "cloudinary"; // Ensure Cloudinary is configured
-import { sendSecurityCode } from "../services/emailService.js";
-import bcrypt from "bcrypt";
-import { getCookieOptions } from "../controllers/authController.js";
-
-//---------- GET USER ----------
-export const getProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.status(200).json(user);
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-//---------- UPDATE USER PROFILE ----------
-export const updateProfile = async (req, res) => {
-  try {
-    const { fullName, phone, address, profilePic, username, gender, dob } =
-      req.body;
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    // Update standard profile fields
-    if (username) user.username = username;
-    if (fullName) user.fullName = fullName;
-    if (phone) user.phone = phone;
-    if (gender) user.gender = gender;
-    if (dob) user.dob = dob;
-
-    // Standardize Address Array
-    if (address && Array.isArray(address)) {
-      user.address = address;
-      // Tells Mongoose to deep-check the array for changes
-      user.markModified("address");
-    }
-
-    await user.save();
-    res.status(200).json({ message: "Profile synchronized", user });
-  } catch (error) {
-    res.status(500).json({ message: "Update failed", error: error.message });
-  }
-};
-
-// @desc    Step 1: Request OTP for sensitive actions
-// src/controllers/userController.js
-export const requestSecurityCode = async (req, res) => {
-  try {
-    const { type } = req.body;
-    const user = await User.findById(req.user.id);
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    user.verificationCode = code;
-    user.codeExpires = Date.now() + 10 * 60 * 1000;
-    await user.save();
-
-    console.log("Attempting to send email to:", user.email); // LOG 1
-
-    const emailSent = await sendSecurityCode(user, code, type);
-
-    if (!emailSent) {
-      console.log("Email service returned FALSE"); // LOG 2
-      return res.status(500).json({ message: "Email service failed" });
-    }
-
-    res.status(200).json({ message: "Code sent!" });
-  } catch (error) {
-    console.error("CRASH IN REQUEST_CODE:", error); // LOG 3
-    res.status(500).json({ message: error.message });
-  }
-};
-
-export const verifyPasswordChange = async (req, res) => {
-  try {
-    const { current, new: newPassword, code } = req.body;
-    const user = await User.findById(req.user.id);
-
-    if (user.verificationCode !== code || Date.now() > user.codeExpires) {
-      return res
-        .status(400)
-        .json({ message: "Invalid or expired security code" });
-    }
-
-    const isMatch = await bcrypt.compare(current, user.password);
-    if (!isMatch)
-      return res.status(400).json({ message: "Current password incorrect" });
-
-    // ❌ REMOVE THESE TWO LINES (The "Double Hash" Bug)
-    // const salt = await bcrypt.genSalt(10);
-    // user.password = await bcrypt.hash(newPassword, salt);
-
-    // ✅ REPLACE WITH THIS:
-    user.password = newPassword; // Set plain text, let UserSchema handle hashing
-
-    // Clear OTP fields
-    user.verificationCode = undefined;
-    user.codeExpires = undefined;
-    user.tokenVersion += 1;
-
-    await user.save(); // This triggers userSchema.pre('save') which hashes it ONCE.
-    const cookieOptions = getCookieOptions();
-
-    res.clearCookie("accessToken", cookieOptions);
-    res.clearCookie("refreshToken", cookieOptions);
-
-    return res.status(200).json({
-      message: "Password updated successfully",
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Step 2b: Verify OTP and Delete Account
-export const verifyAccountDeletion = async (req, res) => {
-  try {
-    const { code } = req.body;
-    const user = await User.findById(req.user.id);
-
-    if (user.verificationCode !== code || Date.now() > user.codeExpires) {
-      return res
-        .status(400)
-        .json({ message: "Invalid or expired security code" });
-    }
-
-    if (user.profilePic?.publicId) {
-      await cloudinary.uploader.destroy(user.profilePic.publicId);
-    }
-
-    await User.findByIdAndDelete(req.user.id);
-
-    const cookieOptions = getCookieOptions();
-    res.clearCookie("accessToken", cookieOptions);
-    res.clearCookie("refreshToken", cookieOptions);
-
-    res.status(200).json({ message: "Account successfully terminated" });
-  } catch (error) {
-    res.status(500).json({ message: "Deletion failed" });
-  }
-};
-</file>
-
 <file path="server/src/models/userSchema.js">
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
@@ -11064,7 +11393,7 @@ import express from 'express';
 import { 
   createQrPhPayment,
   checkPaymentIntentStatus,
-} from '../controllers/paymentController.js';
+} from '../controllers/qrPhController.js';
 import { protect, adminOnly } from '../middlewares/protect.js';
 
 const router = express.Router();
@@ -14308,12 +14637,14 @@ import {
   initiatePayMongoCheckout, 
   getUserOrders, 
   getOrderById,
-  getOrderByPaymentIntent,
-  confirmQrPhOrder,
   confirmDelivery,
   deleteOrder,
   cancelOrder,
-} from '../controllers/orderController.js';
+} from '../controllers/customerOrderController.js';
+import { 
+  getOrderByPaymentIntent,
+  confirmQrPhOrder,
+} from '../controllers/qrPhController.js';
 import { handlePayMongoWebhook } from '../controllers/webhookController.js';
 import { protect } from '../middlewares/protect.js';
 
@@ -15818,634 +16149,6 @@ export const chatAPI = {
   },
 };
 export default api;
-</file>
-
-<file path="server/src/controllers/orderController.js">
-import axios from "axios";
-import crypto from "crypto";
-import Order from "../models/orderSchema.js";
-import Cart from "../models/cartSchema.js";
-import Product from "../models/productSchema.js";
-import User from "../models/userSchema.js";
-import { sendOrderConfirmation } from "../services/emailService.js";
-import { config } from "../envconfig.js";
-
-export const initiatePayMongoCheckout = async (req, res) => {
-  try {
-    const { items, shippingInfo, isDirectPurchase } = req.body;
-
-    if (!items || items.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "No items selected for checkout" });
-    }
-
-    const isDirect =
-      isDirectPurchase ||
-      (items[0]?._id && String(items[0]._id).startsWith("direct"));
-
-    const metadata = {
-      userId: String(req.user.id),
-      cartItemIds: isDirect
-        ? "DIRECT_BUY"
-        : items.map((item) => item._id).join(","),
-      directItemData: isDirect
-        ? JSON.stringify(
-            items.map((item) => ({
-              pId: item.productId?._id || item.productId,
-              n: item.productId?.name || item.name,
-              pr: item.price,
-              q: item.quantity,
-              s: item.size,
-              img:
-                item.productId?.images?.[0]?.url ||
-                item.productId?.images?.[0] ||
-                item.image,
-            })),
-          )
-        : "",
-      fullName: String(shippingInfo.fullName || ""),
-      address: String(shippingInfo.address || ""),
-      city: String(shippingInfo.city || ""),
-      postalCode: String(shippingInfo.postalCode || ""),
-      contactNumber: String(shippingInfo.contactNumber || ""),
-      instructions: String(shippingInfo.deliveryInstructions || ""),
-    };
-
-    const secretKey = config.paymongoSecret.trim();
-    const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
-
-    const lineItems = items.map((item) => ({
-      currency: "PHP",
-      amount: Math.round(item.price * 100),
-      name: item.productId?.name || item.name,
-      quantity: item.quantity,
-      description: `Size: ${item.size || "N/A"}`,
-    }));
-
-    const options = {
-      method: "POST",
-      url: "https://api.paymongo.com/v1/checkout_sessions",
-      headers: {
-        accept: "application/json",
-        "Content-Type": "application/json",
-        authorization: authHeader,
-      },
-      data: {
-        data: {
-          attributes: {
-            send_email_receipt: true,
-            show_line_items: true,
-            payment_method_types: ["gcash", "paymaya", "card", "grab_pay"],
-            line_items: lineItems,
-            success_url: `${config.clientUrl}/payment-success`,
-            cancel_url: `${config.clientUrl}/checkout?payment=cancelled`,
-            metadata: metadata,
-          },
-        },
-      },
-    };
-
-    const response = await axios.request(options);
-    res
-      .status(200)
-      .json({ checkoutUrl: response.data.data.attributes.checkout_url });
-  } catch (error) {
-    console.error("❌ PAYMONGO ERROR:", error.response?.data || error.message);
-    res.status(500).json({ message: "Payment initialization failed" });
-  }
-};
-
-export const getUserOrders = async (req, res) => {
-  try {
-    const orders = await Order.find({ userId: req.user.id })
-      .sort({ createdAt: -1 })
-      .populate("items.productId", "name images");
-    res.status(200).json({ orders });
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching orders" });
-  }
-};
-
-export const getOrderById = async (req, res) => {
-  try {
-    const order = await Order.findOne({
-      _id: req.params.id,
-      userId: req.user.id,
-    }).populate("items.productId", "name images price");
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    res.status(200).json(order);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching order" });
-  }
-};
-
-export const confirmDelivery = async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    order.status = "Delivered";
-    await order.save();
-    res.status(200).json(order);
-  } catch (error) {
-    console.error("Validation Error:", error.message);
-    res.status(500).json({ message: error.message });
-  }
-};
-
-export const deleteOrder = async (req, res) => {
-  try {
-    await Order.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: "Order purged from manifest" });
-  } catch (error) {
-    res.status(500).json({ message: "Server error during deletion" });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// CANCEL ORDER — auto-approve, restore stock, trigger PayMongo refund
-// User can cancel anytime before shipment is arranged
-// ─────────────────────────────────────────────────────────────────
-export const cancelOrder = async (req, res) => {
-  try {
-    const { reason } = req.body;
-
-    // Validate reason is provided
-    if (!reason || !reason.trim()) {
-      return res
-        .status(400)
-        .json({ message: "Cancellation reason is required." });
-    }
-
-    const order = await Order.findOne({
-      _id: req.params.id,
-      userId: req.user.id,
-    });
-
-    if (!order) {
-      return res.status(404).json({ message: "Order not found." });
-    }
-
-    // Block cancellation if already shipped or beyond
-    const blockedStatuses = [
-      "Shipped/In Transit",
-      "Out for Delivery",
-      "Delivered",
-      "Completed",
-      "Cancelled",
-    ];
-    if (blockedStatuses.includes(order.status)) {
-      return res.status(400).json({
-        message: "Cannot cancel — order has already been shipped or completed.",
-      });
-    }
-
-    // ── 1. RESTORE STOCK ──
-    const stockUpdates = order.items.map((item) => {
-      if (!item.productId) return Promise.resolve();
-      return Product.updateOne(
-        { _id: item.productId, "sizes.size": item.size },
-        { $inc: { "sizes.$.stock": item.quantity } }, // +quantity to restore
-      );
-    });
-    await Promise.all(stockUpdates);
-    console.log(`✅ Stock restored for order ${order._id}`);
-
-    // ── 2. PAYMONGO REFUND (only for supported payment methods) ──
-    // QR PH (InstaPay/PESONet) and GrabPay cannot be refunded via API.
-    // Those require manual bank transfer back to the customer.
-    const AUTO_REFUNDABLE = ["gcash", "paymaya", "card"];
-    const canAutoRefund =
-      order.paymentStatus === "paid" &&
-      AUTO_REFUNDABLE.includes(order.paymentMethod);
-    const needsManualRefund = order.paymentStatus === "paid" && !canAutoRefund;
-
-    let refundId = null;
-
-    if (canAutoRefund) {
-      try {
-        const secretKey = config.paymongoSecret.trim();
-        const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
-
-        // Get the actual payment ID from the checkout session
-        let paymentId = null;
-        if (order.checkoutSessionId) {
-          const sessionRes = await axios.get(
-            `https://api.paymongo.com/v1/checkout_sessions/${order.checkoutSessionId}`,
-            { headers: { authorization: authHeader } },
-          );
-          const payments = sessionRes.data.data.attributes.payments;
-          if (payments && payments.length > 0) {
-            paymentId = payments[0].id;
-          }
-        }
-
-        if (paymentId) {
-          const refundRes = await axios.post(
-            "https://api.paymongo.com/v1/refunds",
-            {
-              data: {
-                attributes: {
-                  amount: Math.round(order.totalAmount * 100),
-                  payment_id: paymentId,
-                  reason: "others",
-                  notes: reason.trim(),
-                },
-              },
-            },
-            {
-              headers: {
-                authorization: authHeader,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-          refundId = refundRes.data.data.id;
-          console.log(
-            `💸 PayMongo refund triggered: ${refundId} for order ${order._id}`,
-          );
-        } else {
-          console.warn(
-            `⚠️ Could not find payment ID for order ${order._id} — refund skipped`,
-          );
-        }
-      } catch (refundErr) {
-        console.error(
-          `❌ PayMongo refund failed for order ${order._id}:`,
-          refundErr.response?.data || refundErr.message,
-        );
-      }
-    } else if (needsManualRefund) {
-      // QR PH / GrabPay — log it so admin knows to refund manually
-      console.log(
-        `⚠️ Manual refund required for order ${order._id} (method: ${order.paymentMethod}, amount: ₱${order.totalAmount})`,
-      );
-    }
-
-    // ── 3. UPDATE ORDER ──
-    order.status = "Cancelled";
-    order.paymentStatus = refundId
-      ? "refunded"
-      : needsManualRefund
-        ? "refund_pending"
-        : order.paymentStatus;
-    order.cancellationReason = reason.trim();
-    order.cancelledAt = new Date();
-    order.refundId = refundId;
-    await order.save();
-
-    console.log(
-      `✅ Order ${order._id} cancelled. Reason: "${reason}". Refund: ${refundId || (needsManualRefund ? "MANUAL REQUIRED" : "N/A")}`,
-    );
-
-    res.status(200).json({
-      message: "Order cancelled successfully.",
-      refundTriggered: !!refundId,
-      needsManualRefund,
-      refundId,
-      order,
-    });
-  } catch (error) {
-    console.error("❌ CANCEL ERROR:", error);
-    res.status(500).json({ message: "Failed to cancel order." });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// CONFIRM QR PH ORDER — frontend fallback after polling succeeds
-// ─────────────────────────────────────────────────────────────────
-export const confirmQrPhOrder = async (req, res) => {
-  try {
-    const { paymentIntentId } = req.body;
-    const userId = req.user.id;
-
-    if (!paymentIntentId) {
-      return res.status(400).json({ message: "paymentIntentId required" });
-    }
-
-    const secretKey = config.paymongoSecret.trim();
-    const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
-    const intentRes = await axios.get(
-      `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}`,
-      { headers: { authorization: authHeader } },
-    );
-    const piStatus = intentRes.data.data.attributes.status;
-    const piMetadata = intentRes.data.data.attributes.metadata;
-
-    console.log(`🔍 Intent ${paymentIntentId} status: ${piStatus}`);
-
-    if (piStatus !== "succeeded") {
-      return res
-        .status(400)
-        .json({ message: `Payment not confirmed. Status: ${piStatus}` });
-    }
-
-    if (piMetadata?.userId && String(piMetadata.userId) !== String(userId)) {
-      console.error("🚨 userId mismatch — possible fraud");
-      return res.status(403).json({ message: "Unauthorized" });
-    }
-
-    let pendingOrder = await Order.findOne({ paymentIntentId });
-
-    if (pendingOrder) {
-      if (String(pendingOrder.userId) !== String(userId)) {
-        return res.status(403).json({ message: "Unauthorized" });
-      }
-      if (pendingOrder.paymentStatus === "paid") {
-        console.log(
-          `✅ Order already confirmed (webhook was first): ${pendingOrder._id}`,
-        );
-        return res
-          .status(200)
-          .json({ order: pendingOrder, alreadyConfirmed: true });
-      }
-      pendingOrder.paymentStatus = "paid";
-      pendingOrder.status = "Order in Progress";
-      await pendingOrder.save();
-    } else {
-      console.error(
-        `❌ No order found for ${paymentIntentId} but payment succeeded`,
-      );
-      return res
-        .status(200)
-        .json({
-          message:
-            "Payment confirmed but order record missing. Please contact support.",
-          alreadyConfirmed: true,
-        });
-    }
-
-    for (const item of pendingOrder.items) {
-      if (item.productId && item.size) {
-        await Product.updateOne(
-          { _id: item.productId, "sizes.size": item.size },
-          { $inc: { "sizes.$.stock": -item.quantity } },
-        );
-      }
-    }
-
-    if (!pendingOrder.isDirectPurchase) {
-      const paidProductIds = pendingOrder.items.map((i) => String(i.productId));
-      await Cart.findOneAndUpdate(
-        { userId },
-        { $pull: { items: { productId: { $in: paidProductIds } } } },
-      );
-      const updatedCart = await Cart.findOne({ userId });
-      if (updatedCart) {
-        updatedCart.totalAmount = updatedCart.items.reduce(
-          (sum, i) => sum + i.price * i.quantity,
-          0,
-        );
-        await updatedCart.save();
-      }
-    }
-
-    try {
-      const user = await User.findById(userId);
-      if (user?.email) await sendOrderConfirmation(pendingOrder, user);
-    } catch (emailErr) {
-      console.error("📧 Email failed:", emailErr.message);
-    }
-
-    console.log(`✅ QR PH order confirmed: ${pendingOrder._id}`);
-    res.status(200).json({ order: pendingOrder });
-  } catch (error) {
-    console.error("❌ confirmQrPhOrder error:", error.message);
-    res
-      .status(500)
-      .json({ message: "Failed to confirm order", error: error.message });
-  }
-};
-
-// Poll order status by paymentIntentId
-export const getOrderByPaymentIntent = async (req, res) => {
-  try {
-    const { paymentIntentId } = req.params;
-    const order = await Order.findOne({ paymentIntentId });
-    if (!order) return res.status(404).json({ status: "pending" });
-    res.status(200).json({ status: order.paymentStatus, orderId: order._id });
-  } catch (error) {
-    res.status(500).json({ message: "Error checking order status" });
-  }
-};
-</file>
-
-<file path="server/src/controllers/paymentController.js">
-import { config } from "../envconfig.js";
-import Order from "../models/orderSchema.js";
-import Cart from "../models/cartSchema.js";
-import Product from "../models/productSchema.js";
-import axios from "axios";
-
-export const createQrPhPayment = async (req, res) => {
-  try {
-    const {
-      shippingInfo,
-      isDirectPurchase,
-      directProductId,
-      directQuantity,
-      directSize,
-      selectedCartItemIds,
-    } = req.body;
-
-    const userId = req.user.id;
-    const secretKey = config.paymongoSecret.trim();
-    const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
-
-    let orderItems;
-    let serverTotal;
-
-    if (isDirectPurchase) {
-      // ── DIRECT / BUY NOW ──
-      if (!directProductId || !directSize || !directQuantity) {
-        return res
-          .status(400)
-          .json({ message: "Missing direct purchase details" });
-      }
-      const product = await Product.findById(directProductId);
-      if (!product)
-        return res.status(404).json({ message: "Product not found" });
-
-      const sizeData = product.sizes?.find((s) => s.size === directSize);
-      if (!sizeData || sizeData.stock < directQuantity) {
-        return res
-          .status(400)
-          .json({ message: "Insufficient stock for selected size" });
-      }
-
-      const serverPrice = sizeData.price;
-      serverTotal = serverPrice * directQuantity;
-      orderItems = [
-        {
-          productId: product._id,
-          name: product.name,
-          price: serverPrice,
-          quantity: directQuantity,
-          size: directSize,
-          image: product.images?.[0]?.url,
-        },
-      ];
-    } else {
-      // ── CART CHECKOUT — only selected items ──
-      const cart = await Cart.findOne({ userId }).populate("items.productId");
-      if (!cart || cart.items.length === 0) {
-        return res.status(400).json({ message: "Cart is empty" });
-      }
-
-      // SECURITY: filter to selected items, calculate total server-side
-      const selectedIds = selectedCartItemIds || [];
-      console.log("🔍 selectedIds from frontend:", JSON.stringify(selectedIds));
-      console.log(
-        "🔍 all cart item IDs:",
-        cart.items.map((i) => String(i._id)),
-      );
-      const selectedItems2 = cart.items.filter((item) =>
-        selectedIds.includes(String(item._id)),
-      );
-      console.log("🔍 matched items count:", selectedItems2.length);
-      const selectedItems =
-        selectedIds.length > 0
-          ? cart.items.filter((item) => selectedIds.includes(String(item._id)))
-          : cart.items;
-
-      if (selectedItems.length === 0) {
-        return res
-          .status(400)
-          .json({ message: "No matching cart items found" });
-      }
-
-      serverTotal = selectedItems.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0,
-      );
-      orderItems = selectedItems.map((item) => ({
-        productId: item.productId._id,
-        name: item.productId.name,
-        price: item.price,
-        quantity: item.quantity,
-        size: item.size || "N/A",
-        image: item.productId?.images?.[0]?.url,
-        cartItemId: String(item._id),
-      }));
-    }
-
-    const amountInCentavos = Math.round(serverTotal * 100);
-
-    // Step 1: Create Payment Intent with server-calculated amount
-    const intentRes = await axios.post(
-      "https://api.paymongo.com/v1/payment_intents",
-      {
-        data: {
-          attributes: {
-            amount: amountInCentavos,
-            payment_method_allowed: ["qrph"],
-            currency: "PHP",
-            description: "EKOMERS Order Payment",
-            metadata: { userId: String(userId) },
-          },
-        },
-      },
-      {
-        headers: {
-          authorization: authHeader,
-          "Content-Type": "application/json",
-        },
-      },
-    );
-
-    const paymentIntentId = intentRes.data.data.id;
-    const clientKey = intentRes.data.data.attributes.client_key;
-
-    // Step 2: Create QR PH Payment Method
-    const methodRes = await axios.post(
-      "https://api.paymongo.com/v1/payment_methods",
-      {
-        data: { attributes: { type: "qrph" } },
-      },
-      {
-        headers: {
-          authorization: authHeader,
-          "Content-Type": "application/json",
-        },
-      },
-    );
-
-    const paymentMethodId = methodRes.data.data.id;
-
-    // Step 3: Attach Payment Method to Intent
-    const attachRes = await axios.post(
-      `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}/attach`,
-      {
-        data: {
-          attributes: {
-            payment_method: paymentMethodId,
-            client_key: clientKey,
-          },
-        },
-      },
-      {
-        headers: {
-          authorization: authHeader,
-          "Content-Type": "application/json",
-        },
-      },
-    );
-
-    const attrs = attachRes.data.data.attributes;
-    const qrImage =
-      attrs.next_action?.code?.image_url || attrs.next_action?.data?.image_url;
-
-    // Save pending order with server-verified data.
-    // createdAt is intentionally NOT set here — it will be stamped when
-    // payment is confirmed (webhook or fallback), so the timestamp reflects
-    // when the user actually paid, not when the QR was generated.
-    await Order.create({
-      userId,
-      paymentIntentId,
-      items: orderItems.map((i) => ({
-        productId: i.productId,
-        name: i.name,
-        price: i.price,
-        quantity: i.quantity,
-        size: i.size,
-        image: i.image,
-      })),
-      totalAmount: serverTotal,
-      shippingInfo,
-      paymentMethod: "qrph",
-      paymentStatus: "pending",
-      status: "Pending",
-      isDirectPurchase: !!isDirectPurchase,
-      createdAt: null, // will be overwritten on confirmation
-    });
-
-    console.log(
-      `✅ QR PH pending order: ${paymentIntentId} (${orderItems.length} items, ₱${serverTotal})`,
-    );
-    res.status(200).json({ paymentIntentId, qrImage, status: attrs.status });
-  } catch (error) {
-    console.error("❌ QR PH Error:", error.response?.data || error.message);
-    res.status(500).json({ message: "QR PH payment failed" });
-  }
-};
-
-export const checkPaymentIntentStatus = async (req, res) => {
-  try {
-    const { paymentIntentId } = req.params;
-    const secretKey = config.paymongoSecret.trim();
-    const authHeader = `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`;
-
-    const response = await axios.get(
-      `https://api.paymongo.com/v1/payment_intents/${paymentIntentId}`,
-      { headers: { authorization: authHeader } },
-    );
-
-    const status = response.data.data.attributes.status;
-    res.status(200).json({ status });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to check status" });
-  }
-};
 </file>
 
 <file path="server/src/server.js">

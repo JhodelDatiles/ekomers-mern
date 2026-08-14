@@ -1,4 +1,3 @@
-// userRoutes.js
 import express from 'express';
 import { 
   getProfile, 
@@ -6,7 +5,7 @@ import {
   requestSecurityCode, 
   verifyPasswordChange, 
   verifyAccountDeletion // Make sure this matches the controller
-} from '../controllers/userController.js';
+} from '../controllers/userProfileController.js';
 import { protect } from '../middlewares/protect.js';
 import {forgotPasswordLimiter} from "../middlewares/rateLimiter.js"
 import {validatePassword} from "../middlewares/passwordValidation.js"

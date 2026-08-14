@@ -1,8 +1,8 @@
 import User from "../models/userSchema.js";
-import { v2 as cloudinary } from "cloudinary"; // Ensure Cloudinary is configured
+import { v2 as cloudinary } from "cloudinary"; 
 import { sendSecurityCode } from "../services/emailService.js";
 import bcrypt from "bcrypt";
-import { getCookieOptions } from "../controllers/authController.js";
+import { getCookieOptions } from "./authController.js";
 
 //---------- GET USER ----------
 export const getProfile = async (req, res) => {
@@ -46,7 +46,7 @@ export const updateProfile = async (req, res) => {
 };
 
 // @desc    Step 1: Request OTP for sensitive actions
-// src/controllers/userController.js
+// src/controllers/userProfileController.js
 export const requestSecurityCode = async (req, res) => {
   try {
     const { type } = req.body;
