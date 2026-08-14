@@ -2,7 +2,7 @@ import express from 'express';
 import { 
   createQrPhPayment,
   checkPaymentIntentStatus,
-} from '../controllers/paymentController.js';
+} from '../controllers/qrPhController.js';
 import { protect, adminOnly } from '../middlewares/protect.js';
 
 const router = express.Router();

@@ -8,7 +8,7 @@ import {
   markAsRead,
   closeConversation,
   getUnreadCount
-} from '../controllers/chats/chatController.js';
+} from '../controllers/chats/supportChatController.js';
 import { protect, adminOnly } from '../middlewares/protect.js';
 
 const router = express.Router();

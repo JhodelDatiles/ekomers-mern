@@ -3,12 +3,14 @@ import {
   initiatePayMongoCheckout, 
   getUserOrders, 
   getOrderById,
-  getOrderByPaymentIntent,
-  confirmQrPhOrder,
   confirmDelivery,
   deleteOrder,
   cancelOrder,
-} from '../controllers/orderController.js';
+} from '../controllers/customerOrderController.js';
+import { 
+  getOrderByPaymentIntent,
+  confirmQrPhOrder,
+} from '../controllers/qrPhController.js';
 import { handlePayMongoWebhook } from '../controllers/webhookController.js';
 import { protect } from '../middlewares/protect.js';
 
