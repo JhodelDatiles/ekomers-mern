@@ -3,16 +3,14 @@ import {
   uploadImage,
   uploadMultipleImages,
   deleteImage,
-} from "../controllers/cloudinaryUploadController.js";
+} from "../controllers/uploadController.js";
 import { upload } from "../config/cloudinary.js";
 import { protect, adminOnly } from "../middlewares/protect.js";
 
 const router = express.Router();
 
-// Single image upload
 router.post("/single", protect, upload.single("image"), uploadImage);
 
-// Multiple images upload (max 5)
 router.post(
   "/multiple",
   protect,
@@ -21,7 +19,6 @@ router.post(
   uploadMultipleImages,
 );
 
-// Delete image
 router.delete("/delete", protect, adminOnly, deleteImage);
 
 export default router;

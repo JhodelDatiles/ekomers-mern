@@ -291,6 +291,14 @@ export const paymentAPI = {
     const response = await api.get(`/payment/qrph/status/${paymentIntentId}`);
     return response.data;
   },
+  getOrderByPaymentIntent: async (paymentIntentId) => {
+    const response = await api.get(`/payment/qrph/by-intent/${paymentIntentId}`);
+    return response.data;
+  },
+  confirmQrPhOrder: async ({ paymentIntentId }) => {
+    const response = await api.post('/payment/qrph/confirm', { paymentIntentId });
+    return response.data;
+  },
 };
 
 // Review API
