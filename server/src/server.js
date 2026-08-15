@@ -15,12 +15,13 @@ import productRoutes from "./routes/productRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
+import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
+import adminUserRoutes from "./routes/adminUserRoutes.js";
+import adminReportRoutes from "./routes/adminReportRoutes.js";
 import adminProductRoutes from "./routes/adminProductRoutes.js";
 import adminOrderRoutes from "./routes/adminOrderRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
-import reviewRoutes from "./routes/reviewRoutes.js";
-import mapRoutes from "./routes/map.js";
+import mapRoutes from "./routes/mapRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import aiChatRoutes from "./routes/aiChatRoutes.js";
@@ -94,7 +95,6 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/wishlist", wishlistRoutes);
-app.use("/api/reviews", reviewRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/map", mapRoutes);
 app.use("/api/chat", chatRoutes);
@@ -103,7 +103,9 @@ app.use("/api/ai-chat", aiChatRoutes);
 // 5. ADMIN SPECIFIC ROUTES
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
-app.use("/api/", adminRoutes);
+app.use("/api/settings", adminSettingsRoutes);
+app.use("/api/admin/users", adminUserRoutes);
+app.use("/api/admin/sales-report", adminReportRoutes);
 
 // 6. PRODUCTION STATIC FILES
 if (config.isProduction) {
