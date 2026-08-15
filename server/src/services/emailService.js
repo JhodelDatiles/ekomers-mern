@@ -19,7 +19,7 @@ const sendEmail = async ({ to, subject, html, text }) => {
     const res = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        "api-key": config.brevoApiKey,
+        "api-key": config.emailSender,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

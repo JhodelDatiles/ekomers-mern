@@ -2,6 +2,9 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const isProduction = process.env.NODE_ENV === "production";
+//email sender
+const brevoApiKey = process.env.BREVO_API_KEY; //Prod Email sender
+const emailFrom = process.env.EMAIL_FROM; // Dev Email sender
 
 export const config = {
   paymongoSecret: isProduction
@@ -18,11 +21,8 @@ export const config = {
   //DATABASE
   mongoUri: process.env.MONGO_URI,
   //PORT
-  port: process.env.PORT || 5000,
-  //(PROD) BREVO EMAIL SENDER
-  brevoApiKey: process.env.BREVO_API_KEY,
-  //(DEV) NODEMAILER EMAIL SENDER
-  emailFrom: process.env.EMAIL_FROM || "noreply@ekomers.com",
+  port: process.env.PORT,
+  emailSender: isProduction ? brevoApiKey : emailFrom,
   //ClOUDINARY
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
