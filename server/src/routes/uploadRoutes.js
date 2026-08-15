@@ -3,7 +3,7 @@ import {
   uploadImage,
   uploadMultipleImages,
   deleteImage,
-} from "../controllers/uploadController.js";
+} from "../controllers/cloudinaryUploadController.js";
 import { upload } from "../config/cloudinary.js";
 import { protect, adminOnly } from "../middlewares/protect.js";
 
