@@ -39,7 +39,6 @@ const Checkout = () => {
   const isDirectPurchase = location.state?.isDirectPurchase || false;
   // For direct/buy-now: extract single item details for QR PH
   const directItem = isDirectPurchase ? checkoutItems[0] : null;
-
   const [loading, setLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeAddress, setActiveAddress] = useState(null);
@@ -377,9 +376,7 @@ const Checkout = () => {
                     </span>
                   )}
                 </div>
-                <span className="font-black text-sm italic">
-                  ₱{(item.price * item.quantity).toLocaleString()}
-                </span>
+                <span className="font-black text-sm italic">₱{(item.price * item.quantity).toLocaleString()}</span>
               </div>
             ))}
           </div>
